@@ -16,9 +16,10 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, isLoading: true });
+const AuthContext = createContext<AuthContextType>({ user: null, isLoading: true, logout: () => {} });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -84,7 +85,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  return <AuthContext.Provider value={{ user, isLoading }}>{children}</AuthContext.Provider>;
+  const logout = () => {
+    localStorage.removeItem("accessToken");
+    setUser(null);
+    router.push("/auth/login");
+  };
+
+  return <AuthContext.Provider value={{ user, isLoading, logout }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

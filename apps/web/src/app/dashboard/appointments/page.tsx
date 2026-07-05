@@ -190,7 +190,7 @@ export default function AppointmentsPage() {
               <p className="text-sm text-zinc-500">How did the customer pay for this appointment?</p>
               <div className="grid gap-2">
                 <Label>Payment Method</Label>
-                <Select value={paymentMethod} onValueChange={(val) => setPaymentMethod(val || "CASH")}>
+                <Select value={paymentMethod} onValueChange={(val) => { if (val !== null) setPaymentMethod(val); }}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select method" />
                   </SelectTrigger>

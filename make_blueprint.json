@@ -1,0 +1,97 @@
+{
+  "name": "AiSaloonOs - Evolution API to CRM",
+  "flow": [
+    {
+      "id": 1,
+      "module": "gateway:CustomWebHook",
+      "version": 1,
+      "parameters": {
+        "hook": "evolution-api-webhook"
+      },
+      "mapper": {},
+      "metadata": {
+        "designer": {
+          "x": 0,
+          "y": 0
+        },
+        "name": "Receive Evolution Webhook"
+      }
+    },
+    {
+      "id": 2,
+      "module": "http:ActionMakeRequest",
+      "version": 3,
+      "parameters": {
+        "url": "http://{{env.CRM_HOST}}/api/v1/customers/lookup",
+        "method": "post",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{env.CRM_JWT_TOKEN}}"
+          }
+        ],
+        "bodyType": "raw",
+        "parseResponse": true
+      },
+      "mapper": {
+        "body": "{\n  \"businessId\": \"{{env.BUSINESS_ID}}\",\n  \"phone\": \"{{1.data.key.remoteJid}}\",\n  \"name\": \"{{1.data.pushName}}\"\n}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 300,
+          "y": 0
+        },
+        "name": "CRM Lookup / Create Customer"
+      }
+    },
+    {
+      "id": 3,
+      "module": "http:ActionMakeRequest",
+      "version": 3,
+      "parameters": {
+        "url": "http://{{env.CRM_HOST}}/api/v1/conversations/messages",
+        "method": "post",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{env.CRM_JWT_TOKEN}}"
+          }
+        ],
+        "bodyType": "raw",
+        "parseResponse": true
+      },
+      "mapper": {
+        "body": "{\n  \"businessId\": \"{{env.BUSINESS_ID}}\",\n  \"customerPhone\": \"{{1.data.key.remoteJid}}\",\n  \"content\": \"{{1.data.message.conversation}}\",\n  \"role\": \"CUSTOMER\",\n  \"source\": \"WHATSAPP\"\n}"
+      },
+      "metadata": {
+        "designer": {
+          "x": 600,
+          "y": 0
+        },
+        "name": "CRM Store Conversation"
+      }
+    },
+    {
+      "id": 4,
+      "module": "router:Router",
+      "version": 1,
+      "parameters": {},
+      "mapper": {},
+      "metadata": {
+        "designer": {
+          "x": 900,
+          "y": 0
+        },
+        "name": "Intent Router (Future)"
+      }
+    }
+  ]
+}

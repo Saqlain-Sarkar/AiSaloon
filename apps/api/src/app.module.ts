@@ -22,6 +22,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { AiModule } from './ai/ai.module';
 import { WhatsappModule } from './modules/whatsapp/whatsapp.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { RedisModule } from './common/redis';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards';
 
@@ -57,6 +58,7 @@ import { JwtAuthGuard } from './common/guards';
     AiModule,
     WhatsappModule,
     CategoriesModule,
+    RedisModule,
   ],
   providers: [
     {

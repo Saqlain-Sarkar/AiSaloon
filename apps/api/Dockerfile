@@ -50,5 +50,5 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 ENV PORT=4000
 EXPOSE 4000
 
-# Start the application
-CMD ["node", "apps/api/dist/main"]
+# Start the application with DB sync
+CMD ["sh", "-c", "npx prisma db push --schema=prisma/schema.prisma --accept-data-loss && node apps/api/dist/main"]

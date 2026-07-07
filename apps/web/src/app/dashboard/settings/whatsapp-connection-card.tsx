@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, RefreshCcw, CheckCircle2 } from "lucide-react";
+import { MessageSquare, RefreshCcw, CheckCircle2, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 
 
@@ -13,24 +13,38 @@ export function WhatsappConnectionCard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
 
-  const fetchQr = async () => {
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isPolling && !isConnected) {
+      interval = setInterval(() => {
+        fetchQr(true);
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [isPolling, isConnected, user?.businessId]);
+
+  const fetchQr = async (isBackground = false) => {
     if (!user?.businessId) return;
-    setIsLoading(true);
-    setMessage(null);
+    if (!isBackground) setIsLoading(true);
+    if (!isBackground) setMessage(null);
+    setIsPolling(true);
 
     try {
       // The endpoint is public, but we pass Accept: application/json
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://aisaloon.onrender.com/api/v1"}/whatsapp/qr/${user.businessId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://aisaloon.onrender.com/api/v1"}/whatsapp/qr/${user.businessId}?t=${Date.now()}`, {
         headers: {
           'Accept': 'application/json'
-        }
+        },
+        cache: 'no-store'
       });
       
       const data = await response.json();
       
       if (data.connected) {
         setIsConnected(true);
+        setIsPolling(false);
         setQrImageUrl(null);
         setMessage("WhatsApp is successfully connected!");
       } else if (data.qrImageUrl) {
@@ -41,9 +55,9 @@ export function WhatsappConnectionCard() {
       }
     } catch (err) {
       console.error("Failed to fetch WhatsApp status", err);
-      setMessage("Error fetching WhatsApp status.");
+      if (!isBackground) setMessage("Error fetching WhatsApp status.");
     } finally {
-      setIsLoading(false);
+      if (!isBackground) setIsLoading(false);
     }
   };
 
@@ -73,21 +87,28 @@ export function WhatsappConnectionCard() {
         ) : (
           <div className="space-y-4">
             <Button 
-              onClick={fetchQr} 
-              disabled={isLoading}
+              onClick={() => fetchQr(false)} 
+              disabled={isLoading || isPolling}
               className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
             >
-              {isLoading ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-              {qrImageUrl ? "Refresh QR Code" : "Generate WhatsApp QR"}
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+              {isPolling ? "Waiting for Scan..." : "Generate WhatsApp QR"}
             </Button>
             
-            {message && <p className="text-sm text-zinc-600">{message}</p>}
+            {message && <p className="text-sm text-zinc-600 flex items-center gap-2">
+              {isPolling && message === "Initializing WhatsApp Client..." && <Loader2 className="w-3 h-3 animate-spin" />}
+              {message}
+            </p>}
             
             {qrImageUrl && (
-              <div className="mt-4 p-4 border border-zinc-200 rounded-lg bg-white inline-block text-center">
+              <div className="mt-4 p-4 border border-zinc-200 rounded-lg bg-white inline-block text-center relative">
                 <h3 className="font-semibold mb-2">Scan with WhatsApp</h3>
                 <img src={qrImageUrl} alt="WhatsApp QR Code" className="w-64 h-64 mx-auto" />
                 <p className="text-sm text-zinc-500 mt-2">Open WhatsApp {'>'} Linked Devices {'>'} Link a device</p>
+                <div className="absolute top-2 right-2 flex items-center gap-1 text-xs text-zinc-400">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Auto-refreshing
+                </div>
               </div>
             )}
           </div>

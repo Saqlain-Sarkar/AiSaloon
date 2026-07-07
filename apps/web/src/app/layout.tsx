@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import { Outfit, Playfair_Display, Geist } from "next/font/google";
-import SmoothScrolling from "@/components/SmoothScrolling";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/home/Footer";
 import JsonLd from "@/components/JsonLd";
 import { AuthProvider } from "@/components/AuthProvider";
 import "./globals.css";
@@ -34,11 +31,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("antialiased", outfit.variable, playfair.variable, "font-sans", geist.variable)}>
       <body className="flex flex-col bg-white text-zinc-950 min-h-screen">
-        <SmoothScrolling>
-          <AuthProvider>
-            <main className="flex-grow">{children}</main>
-          </AuthProvider>
-        </SmoothScrolling>
+        <AuthProvider>
+          <main className="flex-grow">{children}</main>
+        </AuthProvider>
       </body>
     </html>
   );

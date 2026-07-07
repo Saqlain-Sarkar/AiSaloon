@@ -25,6 +25,7 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { RedisModule } from './common/redis';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { JwtAuthGuard } from './common/guards';
     CategoriesModule,
     RedisModule,
   ],
+  controllers: [AppController],
   providers: [
     {
       provide: APP_GUARD,

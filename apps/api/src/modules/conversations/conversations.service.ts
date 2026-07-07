@@ -3,52 +3,22 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { CustomersService } from '../crm/customers.service';
 import { AppointmentsService } from '../appointments/appointments.service';
-import { GoogleGenAI, Type, Schema } from '@google/genai';
-
-const aiResponseSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    response: { type: Type.STRING, description: "Your friendly, professional message to the customer. Ask only ONE question at a time if information is missing." },
-    intent: { 
-      type: Type.STRING, 
-      enum: ["GREETING", "BOOK_APPOINTMENT", "CANCEL_APPOINTMENT", "RESCHEDULE_APPOINTMENT", "SERVICE_ENQUIRY", "PRICE_ENQUIRY", "MEMBERSHIP_ENQUIRY", "PACKAGE_ENQUIRY", "OFFER_ENQUIRY", "WORKING_HOURS", "LOCATION", "HUMAN_SUPPORT", "COMPLAINT", "FEEDBACK", "UNKNOWN"]
-    },
-    confidence: { type: Type.NUMBER },
-    extractedData: {
-      type: Type.OBJECT,
-      nullable: true,
-      properties: {
-        serviceIds: { type: Type.ARRAY, description: "Array of UUIDs of all requested services", items: { type: Type.STRING }, nullable: true },
-        employeeId: { type: Type.STRING, description: "UUID of the requested staff/stylist if mentioned", nullable: true },
-        date: { type: Type.STRING, description: "Date in YYYY-MM-DD format if mentioned", nullable: true },
-        time: { type: Type.STRING, description: "Time in HH:mm format if mentioned", nullable: true },
-        customer_name: { type: Type.STRING, nullable: true },
-        phone: { type: Type.STRING, nullable: true }
-      }
-    },
-    action: {
-      type: Type.OBJECT,
-      nullable: true,
-      properties: {
-        type: { type: Type.STRING, enum: ["EXECUTE_BOOKING", "CANCEL_BOOKING", "REQUEST_INFO", "HANDOFF", "NONE"], nullable: true },
-        appointmentId: { type: Type.STRING, nullable: true }
-      }
-    }
-  },
-  required: ["response", "intent", "confidence"]
-};
+import OpenAI from 'openai';
 
 @Injectable()
 export class ConversationsService {
   private readonly logger = new Logger(ConversationsService.name);
-  private readonly ai: GoogleGenAI;
+  private readonly ai: OpenAI;
 
   constructor(
     private prisma: PrismaService,
     private customersService: CustomersService,
     private appointmentsService: AppointmentsService,
   ) {
-    this.ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    this.ai = new OpenAI({ 
+      apiKey: process.env.NVIDIA_API_KEY,
+      baseURL: 'https://integrate.api.nvidia.com/v1',
+    });
   }
 
   private async buildSystemPrompt(businessId: string, customerId: string) {
@@ -110,6 +80,27 @@ RULES:
 5. For complaints or explicit human requests, set intent to "HUMAN_SUPPORT" and action to "HANDOFF".
 6. For existing customers, personalize your greeting if appropriate.
 7. The current date is ${new Date().toISOString().split('T')[0]}.
+
+RESPONSE FORMAT:
+You MUST respond with a valid JSON object matching this schema exactly:
+{
+  "response": "Your friendly, professional message to the customer. Ask only ONE question at a time.",
+  "intent": "One of: GREETING, BOOK_APPOINTMENT, CANCEL_APPOINTMENT, RESCHEDULE_APPOINTMENT, SERVICE_ENQUIRY, PRICE_ENQUIRY, MEMBERSHIP_ENQUIRY, PACKAGE_ENQUIRY, OFFER_ENQUIRY, WORKING_HOURS, LOCATION, HUMAN_SUPPORT, COMPLAINT, FEEDBACK, UNKNOWN",
+  "confidence": 0.95,
+  "extractedData": {
+    "serviceIds": ["array of UUIDs"],
+    "employeeId": "UUID if mentioned",
+    "date": "YYYY-MM-DD",
+    "time": "HH:mm",
+    "customer_name": "Name",
+    "phone": "Phone"
+  },
+  "action": {
+    "type": "EXECUTE_BOOKING" | "CANCEL_BOOKING" | "REQUEST_INFO" | "HANDOFF" | "NONE",
+    "appointmentId": "UUID if applicable"
+  }
+}
+Output ONLY the raw JSON object, without markdown block formatting.
     `;
 
     return prompt;
@@ -147,7 +138,7 @@ RULES:
       data: { conversationId: conversation.id, role: 'CUSTOMER', content: dto.content },
     });
 
-    if (!process.env.GEMINI_API_KEY || process.env.DISABLE_AI === 'true') {
+    if (!process.env.NVIDIA_API_KEY || process.env.DISABLE_AI === 'true') {
       return { conversationId: conversation.id, message: "AI Processing is disabled.", intent: "UNKNOWN", action: null, customer };
     }
 
@@ -155,33 +146,30 @@ RULES:
     const systemPrompt = await this.buildSystemPrompt(businessId, customer.id);
     const conversationHistory = await this.getMessages(conversation.id, 1, 15);
     
-    // Format messages for Gemini Chat
-    // Note: Gemini doesn't have a 'system' role in the messages array, it goes in config
-    const geminiMessages = conversationHistory.messages.map((m: any) => ({
-      role: m.role === 'CUSTOMER' ? 'user' : 'model',
-      parts: [{ text: m.content }],
-    }));
-    // Add current user message
-    geminiMessages.push({ role: 'user', parts: [{ text: dto.content }] });
+    // Format messages for OpenAI Chat
+    const aiMessages: any[] = [
+      { role: 'system', content: systemPrompt },
+      ...conversationHistory.messages.map((m: any) => ({
+        role: m.role === 'CUSTOMER' ? 'user' : 'assistant',
+        content: m.content,
+      })),
+      { role: 'user', content: dto.content }
+    ];
 
     let aiResponse;
     try {
-      const completion = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: geminiMessages,
-        config: {
-          systemInstruction: systemPrompt,
-          temperature: 0.6,
-          responseMimeType: 'application/json',
-          responseSchema: aiResponseSchema
-        }
+      const completion = await this.ai.chat.completions.create({
+        model: process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct',
+        messages: aiMessages,
+        temperature: 0.6,
+        response_format: { type: "json_object" }
       });
 
-      const responseText = completion.text;
+      const responseText = completion.choices[0]?.message?.content;
       if (!responseText) throw new Error("Parsed response is null");
-      aiResponse = JSON.parse(responseText);
+      aiResponse = JSON.parse(responseText.trim().replace(/^```json/, '').replace(/```$/, ''));
     } catch (error: any) {
-      this.logger.error("Gemini AI Error: " + error);
+      this.logger.error("NVIDIA AI Error: " + error);
       
       // MOCK FALLBACK FOR DEMONSTRATION DUE TO OPENAI 429 QUOTA LIMITS
       const text = dto.content.toLowerCase();

@@ -164,9 +164,8 @@ Output ONLY the raw JSON object, without markdown block formatting.
         model: process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct',
         messages: aiMessages,
         temperature: 0.6,
-        max_tokens: 1024,
-        timeout: 10000 // 10 seconds timeout
-      });
+        max_tokens: 1024
+      }, { timeout: 10000 });
 
       const responseText = completion.choices[0]?.message?.content;
       this.logger.log("Received response from NVIDIA: " + responseText);

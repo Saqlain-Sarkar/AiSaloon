@@ -107,6 +107,7 @@ Output ONLY the raw JSON object, without markdown block formatting.
   }
 
   async processMessage(dto: SendMessageDto) {
+    this.logger.log(`Processing message from ${dto.customerPhone}: ${dto.content}`);
     let businessId = dto.businessId;
 
     if (!businessId) {
@@ -158,14 +159,17 @@ Output ONLY the raw JSON object, without markdown block formatting.
 
     let aiResponse;
     try {
+      this.logger.log("Sending request to NVIDIA NIM...");
       const completion = await this.ai.chat.completions.create({
         model: process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct',
         messages: aiMessages,
         temperature: 0.6,
-        max_tokens: 1024
+        max_tokens: 1024,
+        timeout: 10000 // 10 seconds timeout
       });
 
       const responseText = completion.choices[0]?.message?.content;
+      this.logger.log("Received response from NVIDIA: " + responseText);
       if (!responseText) throw new Error("Parsed response is null");
       aiResponse = JSON.parse(responseText.trim().replace(/^```json/, '').replace(/```$/, ''));
     } catch (error: any) {

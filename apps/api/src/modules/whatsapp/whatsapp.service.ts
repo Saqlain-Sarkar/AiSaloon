@@ -119,7 +119,8 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       const content = msg.message.conversation || msg.message.extendedTextMessage?.text;
       if (!content) return;
 
-      const customerPhone = senderId.split('@')[0];
+      // Baileys MD JIDs look like "1234567890:44@s.whatsapp.net". We must strip both @ and :
+      const customerPhone = senderId.split('@')[0].split(':')[0];
       const customerName = msg.pushName || 'Unknown';
       
       const settings = await this.prisma.setting.findUnique({ where: { businessId: businessId } });

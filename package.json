@@ -24,5 +24,8 @@
     "prisma": "^6.0.0",
     "ts-node": "^10.9.0",
     "tsx": "^4.19.0"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed/index.ts"
   }
 }

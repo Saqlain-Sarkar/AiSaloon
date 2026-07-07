@@ -16,7 +16,7 @@ export function AiSettingsCard() {
 
   useEffect(() => {
     // Fetch initial AI config
-    fetch("http://localhost:4000/api/v1/settings/ai", {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1"}/settings/ai`, {
       headers: {
         "Authorization": "Bearer TEST_TOKEN", // Mock auth for now
       }
@@ -37,7 +37,7 @@ export function AiSettingsCard() {
 
   const handleSave = async () => {
     try {
-      const res = await fetch("http://localhost:4000/api/v1/settings/ai", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1"}/settings/ai`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

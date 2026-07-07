@@ -21,7 +21,7 @@ export function WhatsappConnectionCard() {
 
     try {
       // The endpoint is public, but we pass Accept: application/json
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1"}/whatsapp/qr/${user.businessId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://aisaloon.onrender.com/api/v1"}/whatsapp/qr/${user.businessId}`, {
         headers: {
           'Accept': 'application/json'
         }

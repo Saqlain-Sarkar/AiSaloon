@@ -32,7 +32,7 @@ export default function LoginPage() {
     setError(null);
     try {
       // NOTE: Connecting to the NestJS API which is being built by the subagent on port 4000
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1"}/auth/login`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://aisaloon.onrender.com/api/v1"}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

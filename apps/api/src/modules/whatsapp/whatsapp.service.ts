@@ -1,14 +1,16 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { Client, LocalAuth, Message } from 'whatsapp-web.js';
-import * as qrcode from 'qrcode-terminal';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConversationsService } from '../conversations/conversations.service';
 import * as fs from 'fs';
+import * as path from 'path';
+import pino from 'pino';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WhatsappService.name);
-  private clients: Map<string, Client> = new Map();
+  private clients: Map<string, ReturnType<typeof makeWASocket>> = new Map();
   private qrCodes: Map<string, string> = new Map();
   private connectionStatus: Map<string, boolean> = new Map();
 
@@ -18,8 +20,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    this.logger.log('Initializing WhatsApp Service Manager...');
-    // Load clients for businesses that already have an active session cache
+    this.logger.log('Initializing WhatsApp Service Manager (Baileys)...');
     try {
       if (fs.existsSync('./whatsapp-auth')) {
         const dirs = fs.readdirSync('./whatsapp-auth', { withFileTypes: true })
@@ -39,80 +40,87 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy() {
     this.logger.log('Shutting down all WhatsApp Clients...');
     for (const [businessId, client] of this.clients.entries()) {
-      await client.destroy();
+      client.logout(); // Stop client
     }
   }
 
   public async initializeClient(businessId: string): Promise<void> {
     if (this.clients.has(businessId)) {
-      return; // Already initialized
+      return; 
     }
 
     this.logger.log(`Starting new WhatsApp Client for business: ${businessId}`);
     
-    const client = new Client({
-      authStrategy: new LocalAuth({
-        clientId: businessId,
-        dataPath: './whatsapp-auth',
-      }),
-      webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-      },
-      puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      }
+    // We use a specific directory per businessId for persistent sessions
+    const sessionDir = path.join('./whatsapp-auth', `session-${businessId}`);
+    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+
+    const client = makeWASocket({
+      auth: state,
+      printQRInTerminal: false,
+      logger: pino({ level: 'silent' }) as any, 
     });
 
     this.clients.set(businessId, client);
     this.connectionStatus.set(businessId, false);
-    this.initializeListeners(businessId, client);
 
-    try {
-      await client.initialize();
-    } catch (error) {
-      this.logger.error(`Failed to initialize WhatsApp Client for ${businessId}`, error);
-      this.clients.delete(businessId);
-    }
+    client.ev.on('creds.update', saveCreds);
+
+    client.ev.on('connection.update', (update) => {
+      const { connection, lastDisconnect, qr } = update;
+      
+      if (qr) {
+        this.qrCodes.set(businessId, qr);
+        this.connectionStatus.set(businessId, false);
+        this.logger.log(`[${businessId}] New QR Code generated. Scan to pair.`);
+      }
+
+      if (connection === 'close') {
+        const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+        this.logger.warn(`[${businessId}] Connection closed, reconnecting: ${shouldReconnect}`);
+        
+        this.connectionStatus.set(businessId, false);
+        this.clients.delete(businessId);
+        this.qrCodes.delete(businessId);
+        
+        if (shouldReconnect) {
+          // Reconnect logic
+          setTimeout(() => {
+            this.initializeClient(businessId);
+          }, 5000);
+        } else {
+          // Logged out, clean up session directory
+          this.logger.log(`[${businessId}] User logged out. Cleaning up session.`);
+          fs.rmSync(sessionDir, { recursive: true, force: true });
+        }
+      } else if (connection === 'open') {
+        this.logger.log(`[${businessId}] WhatsApp Client is Ready! AI is now connected.`);
+        this.connectionStatus.set(businessId, true);
+        this.qrCodes.delete(businessId); 
+      }
+    });
+
+    client.ev.on('messages.upsert', async (m) => {
+      if (m.type !== 'notify') return;
+      for (const msg of m.messages) {
+        await this.handleIncomingMessage(businessId, client, msg);
+      }
+    });
   }
 
-  private initializeListeners(businessId: string, client: Client) {
-    client.on('qr', (qr) => {
-      this.qrCodes.set(businessId, qr);
-      this.connectionStatus.set(businessId, false);
-      this.logger.log(`[${businessId}] Scan the QR code to pair your WhatsApp account`);
-    });
-
-    client.on('ready', () => {
-      this.qrCodes.delete(businessId);
-      this.connectionStatus.set(businessId, true);
-      this.logger.log(`[${businessId}] WhatsApp Client is Ready! AI is now connected.`);
-    });
-    
-    client.on('disconnected', () => {
-       this.connectionStatus.set(businessId, false);
-       this.logger.warn(`[${businessId}] WhatsApp Client Disconnected.`);
-    });
-
-    client.on('auth_failure', (msg) => {
-      this.logger.error(`[${businessId}] WhatsApp Auth Failure: ${msg}`);
-    });
-
-    client.on('message', async (msg: Message) => {
-      await this.handleIncomingMessage(businessId, msg);
-    });
-  }
-
-  private async handleIncomingMessage(businessId: string, msg: Message) {
+  private async handleIncomingMessage(businessId: string, client: any, msg: any) {
     try {
-      if (msg.from.endsWith('@g.us')) return; 
-      if (msg.isStatus) return; 
-      if (msg.type !== 'chat') return; 
+      if (!msg.message || msg.key.fromMe) return;
+      
+      const senderId = msg.key.remoteJid;
+      if (!senderId || senderId.endsWith('@g.us')) return; 
 
-      const contact = await msg.getContact();
-      const customerPhone = contact.number; 
-      const customerName = contact.pushname || contact.name || 'Unknown';
-      const senderId = msg.from; 
+      // Extract text content from either standard or extended message types
+      const content = msg.message.conversation || msg.message.extendedTextMessage?.text;
+      if (!content) return;
+
+      const customerPhone = senderId.split('@')[0];
+      const customerName = msg.pushName || 'Unknown';
       
       const settings = await this.prisma.setting.findUnique({ where: { businessId: businessId } });
       const aiConfig: any = settings?.aiConfig || {};
@@ -122,15 +130,15 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
       if (requireWhitelist) {
         if (!whitelistedNumbers.includes(senderId) && whitelistedNumbers.length > 0) {
-          this.logger.warn(`[${businessId}] Ignored message from ${senderId} (Not in DB whitelist)`);
+          this.logger.warn(`[${businessId}] Ignored message from ${senderId} (Not in whitelist)`);
           return;
         } else if (whitelistedNumbers.length === 0) {
-          this.logger.warn(`[${businessId}] Received message from ${senderId}, but DB whitelist is empty. AI is DISABLED.`);
+          this.logger.warn(`[${businessId}] Received message from ${senderId}, but whitelist is empty. AI DISABLED.`);
           return;
         }
       }
 
-      this.logger.log(`[${businessId}] Received message from ${customerName} (${customerPhone}): ${msg.body}`);
+      this.logger.log(`[${businessId}] Received message from ${customerName} (+${customerPhone}): ${content}`);
 
       const aiResponse = await this.conversationsService.processMessage({
         businessId: businessId, 
@@ -138,15 +146,12 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
         customerName: customerName,
         source: 'WHATSAPP',
         externalId: senderId,
-        content: msg.body,
+        content: content,
       });
 
       if (aiResponse && aiResponse.message) {
-        const client = this.clients.get(businessId);
-        if (client) {
-          await client.sendMessage(senderId, aiResponse.message);
-          this.logger.log(`[${businessId}] AI Replied to ${customerName}: ${aiResponse.message}`);
-        }
+        await client.sendMessage(senderId, { text: aiResponse.message });
+        this.logger.log(`[${businessId}] AI Replied to ${customerName}: ${aiResponse.message}`);
       }
 
     } catch (error) {

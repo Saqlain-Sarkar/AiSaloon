@@ -147,7 +147,7 @@ RULES:
       data: { conversationId: conversation.id, role: 'CUSTOMER', content: dto.content },
     });
 
-    if (!process.env.OPENAI_API_KEY || process.env.DISABLE_AI === 'true') {
+    if (!process.env.GEMINI_API_KEY || process.env.DISABLE_AI === 'true') {
       return { conversationId: conversation.id, message: "AI Processing is disabled.", intent: "UNKNOWN", action: null, customer };
     }
 

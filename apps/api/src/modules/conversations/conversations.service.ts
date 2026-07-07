@@ -161,7 +161,7 @@ Output ONLY the raw JSON object, without markdown block formatting.
     try {
       this.logger.log("Sending request to NVIDIA NIM...");
       const completion = await this.ai.chat.completions.create({
-        model: process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct',
+        model: process.env.NVIDIA_MODEL || 'meta/llama-3.1-8b-instruct',
         messages: aiMessages,
         temperature: 0.6,
         max_tokens: 1024

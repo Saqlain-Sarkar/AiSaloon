@@ -162,7 +162,7 @@ Output ONLY the raw JSON object, without markdown block formatting.
         model: process.env.NVIDIA_MODEL || 'meta/llama-3.1-70b-instruct',
         messages: aiMessages,
         temperature: 0.6,
-        response_format: { type: "json_object" }
+        max_tokens: 1024
       });
 
       const responseText = completion.choices[0]?.message?.content;

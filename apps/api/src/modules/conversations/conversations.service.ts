@@ -78,10 +78,11 @@ RULES:
    - If information is missing, set action to "REQUEST_INFO" and politely ask for ONLY the missing piece (e.g. "What time would you like to come in?").
    - Do NOT ask for all missing things at once.
    - ONLY if ALL information (Service(s), Date, Time) is explicitly provided by the user, set action to "EXECUTE_BOOKING".
-5. NEVER mention a Service ID or UUID in your response message. When talking to the customer, ONLY use the Service Name (e.g. say "Beard Trim", never say "service-beard-trim").
-6. For complaints or explicit human requests, set intent to "HUMAN_SUPPORT" and action to "HANDOFF".
-7. For existing customers, personalize your greeting if appropriate.
-8. The current date is ${new Date().toISOString().split('T')[0]}.
+5. CANCELLATION / NO: Understand local words for "No" (e.g. "Nahi", "Na", "No"). If the user says "No" or cancels a booking flow, set action to "NONE", empty the extractedData (reset date/time/serviceIds to empty), acknowledge them, and ask how else you can help.
+6. NEVER mention a Service ID or UUID in your response message. When talking to the customer, ONLY use the Service Name (e.g. say "Beard Trim", never say "service-beard-trim").
+7. For complaints or explicit human requests, set intent to "HUMAN_SUPPORT" and action to "HANDOFF".
+8. For existing customers, personalize your greeting if appropriate.
+9. The current date is ${new Date().toISOString().split('T')[0]}.
 
 RESPONSE FORMAT:
 You MUST respond with a valid JSON object matching this schema exactly:
@@ -163,7 +164,7 @@ Output ONLY the raw JSON object, without markdown block formatting.
     try {
       this.logger.log("Sending request to NVIDIA NIM...");
       const completion = await this.ai.chat.completions.create({
-        model: process.env.NVIDIA_MODEL || 'meta/llama-3.1-8b-instruct',
+        model: process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct',
         messages: aiMessages,
         temperature: 0.6,
         max_tokens: 1024,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ const registerSchema = z.object({
 type RegisterFormValues = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +48,7 @@ export default function RegisterPage() {
       }
       
       localStorage.setItem("accessToken", json.access_token);
-      window.location.href = "/dashboard";
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err.message);
     } finally {

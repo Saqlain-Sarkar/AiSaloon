@@ -12,10 +12,6 @@ export default function CategoriesPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newCat, setNewCat] = useState({ name: "", color: "#4F46E5", icon: "Sparkles" });
 
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
   const loadCategories = async () => {
     try {
       const data = await fetchCategories();
@@ -26,6 +22,10 @@ export default function CategoriesPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -15,16 +15,6 @@ export function WhatsappConnectionCard() {
   const [message, setMessage] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isPolling && !isConnected) {
-      interval = setInterval(() => {
-        fetchQr(true);
-      }, 5000);
-    }
-    return () => clearInterval(interval);
-  }, [isPolling, isConnected, user?.businessId]);
-
   const fetchQr = async (isBackground = false) => {
     if (!user?.businessId) return;
     if (!isBackground) setIsLoading(true);
@@ -60,6 +50,16 @@ export function WhatsappConnectionCard() {
       if (!isBackground) setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isPolling && !isConnected) {
+      interval = setInterval(() => {
+        fetchQr(true);
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [isPolling, isConnected, user?.businessId]);
 
   return (
     <Card className="border-green-200 shadow-sm relative overflow-hidden">

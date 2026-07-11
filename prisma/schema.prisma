@@ -360,6 +360,7 @@ model Appointment {
   rescheduleCount Int               @default(0)
   price           Decimal?          @db.Decimal(10, 2)
   isWalkIn        Boolean           @default(false)
+  reminderSent    Boolean           @default(false)
   paymentStatus   PaymentStatus     @default(UNPAID)
   paymentMethod   PaymentMethod?
   createdAt       DateTime          @default(now())

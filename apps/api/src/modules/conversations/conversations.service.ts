@@ -257,6 +257,20 @@ Rules:
       // In future: Notify staff via websockets or email
     }
 
+    // Update customer phone if AI extracted it and current is masked/weird
+    if (aiResponse.extractedData?.phone) {
+      if (!customer.phone || customer.phone.length > 15 || customer.phone.includes('lid') || customer.phone !== aiResponse.extractedData.phone) {
+        try {
+          await this.prisma.customer.update({
+            where: { id: customer.id },
+            data: { phone: aiResponse.extractedData.phone }
+          });
+        } catch (err) {
+          this.logger.error("Failed to update customer phone from AI extraction");
+        }
+      }
+    }
+
     // Save AI Response
     await this.prisma.message.create({
       data: {

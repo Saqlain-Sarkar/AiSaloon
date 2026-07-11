@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, RefreshCcw, CheckCircle2, Loader2 } from "lucide-react";
@@ -14,6 +14,13 @@ export function WhatsappConnectionCard() {
   const [isConnected, setIsConnected] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const qrRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (qrImageUrl && qrRef.current) {
+      qrRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [qrImageUrl]);
 
   const fetchQr = async (isBackground = false) => {
     if (!user?.businessId) return;
@@ -101,7 +108,7 @@ export function WhatsappConnectionCard() {
             </p>}
             
             {qrImageUrl && (
-              <div className="mt-4 p-4 border border-zinc-200 rounded-lg bg-white inline-block text-center relative">
+              <div ref={qrRef} className="mt-4 p-4 border border-zinc-200 rounded-lg bg-white inline-block text-center relative">
                 <h3 className="font-semibold mb-2">Scan with WhatsApp</h3>
                 <img src={qrImageUrl} alt="WhatsApp QR Code" className="w-64 h-64 mx-auto" />
                 <p className="text-sm text-zinc-500 mt-2">Open WhatsApp {'>'} Linked Devices {'>'} Link a device</p>

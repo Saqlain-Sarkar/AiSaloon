@@ -132,10 +132,10 @@ Rules:
               extractedData: {
                 type: Type.OBJECT,
                 properties: {
-                  serviceIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  serviceIds: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of exact UUIDs of the requested services." },
                   employeeId: { type: Type.STRING },
-                  date: { type: Type.STRING },
-                  time: { type: Type.STRING },
+                  date: { type: Type.STRING, description: "Date in YYYY-MM-DD format" },
+                  time: { type: Type.STRING, description: "Time strictly in HH:mm format (e.g. 14:30)" },
                   customer_name: { type: Type.STRING },
                   phone: { type: Type.STRING }
                 }
@@ -224,7 +224,8 @@ Rules:
         });
         
         if (branch && requestedServices.length > 0 && aiResponse.extractedData.date && aiResponse.extractedData.time) {
-          let currentStartTime = new Date(`${aiResponse.extractedData.date}T${aiResponse.extractedData.time}:00.000Z`);
+          const timeStr = aiResponse.extractedData.time.substring(0, 5); // Ensure HH:mm format
+          let currentStartTime = new Date(`${aiResponse.extractedData.date}T${timeStr}:00.000Z`);
           
           for (const service of requestedServices) {
             await this.appointmentsService.create(businessId, {

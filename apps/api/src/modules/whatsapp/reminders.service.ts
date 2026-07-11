@@ -13,7 +13,7 @@ export class RemindersService {
   ) {}
 
   // Run every 15 minutes to check for upcoming appointments
-  @Cron(CronExpression.EVERY_15_MINUTES)
+  @Cron("*/15 * * * *")
   async handleUpcomingAppointments() {
     this.logger.log('Checking for upcoming appointments to send reminders...');
     
@@ -54,7 +54,7 @@ export class RemindersService {
           
           const reminderMessage = `Hi ${appointment.customer.name},\n\nJust a friendly reminder about your upcoming ${serviceName} appointment at ${businessName} today at ${time}.\n\nSee you soon!`;
           
-          await this.whatsappService.sendMessage(
+          await this.whatsappService.sendWhatsappMessage(
             appointment.businessId,
             appointment.customer.phone,
             reminderMessage

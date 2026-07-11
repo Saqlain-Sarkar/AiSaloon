@@ -172,6 +172,15 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  public async sendWhatsappMessage(businessId: string, toPhone: string, message: string) {
+    const client = this.clients.get(businessId);
+    if (!client) {
+      throw new Error(`WhatsApp client not connected for business ${businessId}`);
+    }
+    const jid = `${toPhone.replace('+', '')}@s.whatsapp.net`;
+    await client.sendMessage(jid, { text: message });
+  }
+
   public getStatus(businessId: string) {
     return {
       connected: this.connectionStatus.get(businessId) || false,

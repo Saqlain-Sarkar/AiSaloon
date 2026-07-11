@@ -3,21 +3,19 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { CustomersService } from '../crm/customers.service';
 import { AppointmentsService } from '../appointments/appointments.service';
-import OpenAI from 'openai';
-
+import { GoogleGenAI } from '@google/genai';
 @Injectable()
 export class ConversationsService {
   private readonly logger = new Logger(ConversationsService.name);
-  private readonly ai: OpenAI;
+  private readonly ai: GoogleGenAI;
 
   constructor(
     private prisma: PrismaService,
     private customersService: CustomersService,
     private appointmentsService: AppointmentsService,
   ) {
-    this.ai = new OpenAI({ 
-      apiKey: process.env.NVIDIA_API_KEY,
-      baseURL: 'https://integrate.api.nvidia.com/v1',
+    this.ai = new GoogleGenAI({ 
+      apiKey: process.env.GEMINI_API_KEY,
     });
   }
 
@@ -70,19 +68,21 @@ History:
 ${apptHistory}
 
 RULES:
-1. ALWAYS answer questions about services, pricing, and staff explicitly using the BUSINESS KNOWLEDGE provided above. Do NOT use vague answers. If asked about prices, list the specific prices from the data. If asked about staff, list the specific names. NEVER invent prices, services, or staff.
-2. Be human, short, and friendly. Do not sound robotic. You MUST reply in the exact language the user uses (e.g. if they speak Hindi, reply in Hindi. If Hinglish, reply in Hinglish).
-3. IMPORTANT DATA EXTRACTION RULE: You MUST accumulate ALL extractedData across the conversation! If the user previously mentioned a Service, and now mentions a Date/Time, your extractedData MUST include BOTH the serviceIds AND the Date/Time! Never drop previously gathered data.
-4. If booking an appointment, you need: Service(s), Date, Time, and (optional) Staff. If multiple services are requested, include ALL their IDs in the serviceIds array.
+1. NO VAGUE ANSWERS & NO HALLUCINATIONS: Answer questions about services, pricing, and staff EXPLICITLY using only the BUSINESS KNOWLEDGE provided. If asked about prices or staff, list the exact details from the data. NEVER invent anything.
+2. ACT HUMAN, NOT LIKE AN AI: Speak naturally, warmly, and concisely, as if you are a real human receptionist at the front desk. Do not use robotic phrases.
+3. MULTILINGUAL SUPPORT: You MUST fluently reply in the EXACT language and script the user uses. You fully support English, Hindi, Gujarati, Hinglish, local regional languages, and UAE languages (like Arabic). Switch naturally between them to match the user.
+4. HANDLE AUDIO INPUTS GRACEFULLY: The user's input might be transcribed from voice/audio. Understand and smoothly handle any typos, conversational filler words (um, uh), or informal speech common in voice messages without getting confused.
+5. IMPORTANT DATA EXTRACTION RULE: You MUST accumulate ALL extractedData across the conversation! If the user previously mentioned a Service, and now mentions a Date/Time, your extractedData MUST include BOTH the serviceIds AND the Date/Time! Never drop previously gathered data.
+6. If booking an appointment, you need: Service(s), Date, Time, and (optional) Staff. If multiple services are requested, include ALL their IDs in the serviceIds array.
    - VERY IMPORTANT: Do NOT guess or invent the Date, Time, or Service. If the user has not explicitly told you these details, you MUST leave them as empty strings "" and set action to "REQUEST_INFO" to ask them.
    - If information is missing, set action to "REQUEST_INFO" and politely ask for ONLY the missing piece (e.g. "What time would you like to come in?").
    - Do NOT ask for all missing things at once.
    - ONLY if ALL information (Service(s), Date, Time) is explicitly provided by the user, set action to "EXECUTE_BOOKING".
-5. CANCELLATION / NO: Understand local words for "No" (e.g. "Nahi", "Na", "No"). If the user says "No" or cancels a booking flow, set action to "NONE", empty the extractedData (reset date/time/serviceIds to empty), acknowledge them, and ask how else you can help.
-6. NEVER mention a Service ID or UUID in your response message. When talking to the customer, ONLY use the Service Name (e.g. say "Beard Trim", never say "service-beard-trim").
-7. For complaints or explicit human requests, set intent to "HUMAN_SUPPORT" and action to "HANDOFF".
-8. For existing customers, personalize your greeting if appropriate.
-9. The current date is ${new Date().toISOString().split('T')[0]}.
+7. CANCELLATION / NO: Understand local words for "No" (e.g. "Nahi", "Na", "No"). If the user says "No" or cancels a booking flow, set action to "NONE", empty the extractedData (reset date/time/serviceIds to empty), acknowledge them, and ask how else you can help.
+8. NEVER mention a Service ID or UUID in your response message. When talking to the customer, ONLY use the Service Name (e.g. say "Beard Trim", never say "service-beard-trim").
+9. For complaints or explicit human requests, set intent to "HUMAN_SUPPORT" and action to "HANDOFF".
+10. For existing customers, personalize your greeting if appropriate.
+11. The current date is ${new Date().toISOString().split('T')[0]}.
 
 RESPONSE FORMAT:
 You MUST respond with a valid JSON object matching this schema exactly:
@@ -142,7 +142,7 @@ Output ONLY the raw JSON object, without markdown block formatting.
       data: { conversationId: conversation.id, role: 'CUSTOMER', content: dto.content },
     });
 
-    if (!process.env.NVIDIA_API_KEY || process.env.DISABLE_AI === 'true') {
+    if (!process.env.GEMINI_API_KEY || process.env.DISABLE_AI === 'true') {
       return { conversationId: conversation.id, message: "AI Processing is disabled.", intent: "UNKNOWN", action: null, customer };
     }
 
@@ -150,29 +150,31 @@ Output ONLY the raw JSON object, without markdown block formatting.
     const systemPrompt = await this.buildSystemPrompt(businessId, customer.id);
     const conversationHistory = await this.getMessages(conversation.id, 1, 15);
     
-    // Format messages for OpenAI Chat
+    // Format messages for Gemini Chat
     const aiMessages: any[] = [
-      { role: 'system', content: systemPrompt },
       ...conversationHistory.messages.map((m: any) => ({
-        role: m.role === 'CUSTOMER' ? 'user' : 'assistant',
-        content: m.content,
+        role: m.role === 'CUSTOMER' ? 'user' : 'model',
+        parts: [{ text: m.content }],
       })),
-      { role: 'user', content: dto.content }
+      { role: 'user', parts: [{ text: dto.content }] }
     ];
 
     let aiResponse;
     try {
-      this.logger.log("Sending request to NVIDIA NIM...");
-      const completion = await this.ai.chat.completions.create({
-        model: process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct',
-        messages: aiMessages,
-        temperature: 0.6,
-        max_tokens: 1024,
-        response_format: { type: 'json_object' }
-      }, { timeout: 15000 });
+      this.logger.log("Sending request to Gemini...");
+      const response = await this.ai.models.generateContent({
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025',
+        contents: aiMessages,
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.6,
+          maxOutputTokens: 1024,
+          responseMimeType: 'application/json',
+        }
+      });
 
-      const responseText = completion.choices[0]?.message?.content;
-      this.logger.log("Received response from NVIDIA: " + responseText);
+      const responseText = response.text;
+      this.logger.log("Received response from Gemini: " + responseText);
       if (!responseText) throw new Error("Parsed response is null");
       
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -180,7 +182,7 @@ Output ONLY the raw JSON object, without markdown block formatting.
       
       aiResponse = JSON.parse(jsonMatch[0]);
     } catch (error: any) {
-      this.logger.error("NVIDIA AI Error: " + error);
+      this.logger.error("Gemini AI Error: " + error);
       
       // MOCK FALLBACK FOR DEMONSTRATION DUE TO OPENAI 429 QUOTA LIMITS
       const text = dto.content.toLowerCase();

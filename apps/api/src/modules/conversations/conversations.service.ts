@@ -163,7 +163,7 @@ Output ONLY the raw JSON object, without markdown block formatting.
     try {
       this.logger.log("Sending request to Gemini...");
       const response = await this.ai.models.generateContent({
-        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-native-audio-preview-12-2025',
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
         contents: aiMessages,
         config: {
           systemInstruction: systemPrompt,

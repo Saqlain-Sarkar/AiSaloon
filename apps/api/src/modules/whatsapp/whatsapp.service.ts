@@ -13,6 +13,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private clients: Map<string, ReturnType<typeof makeWASocket>> = new Map();
   private qrCodes: Map<string, string> = new Map();
   private connectionStatus: Map<string, boolean> = new Map();
+  private processedMessages: Set<string> = new Set();
 
   constructor(
     private readonly conversationsService: ConversationsService,
@@ -112,6 +113,17 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     try {
       if (!msg.message || msg.key.fromMe) return;
       
+      const msgId = msg.key.id;
+      if (msgId && this.processedMessages.has(msgId)) return;
+      if (msgId) {
+        this.processedMessages.add(msgId);
+        // keep cache small
+        if (this.processedMessages.size > 500) {
+          const firstItem = this.processedMessages.values().next().value;
+          if (firstItem) this.processedMessages.delete(firstItem);
+        }
+      }
+
       const senderId = msg.key.remoteJid;
       if (!senderId || senderId.endsWith('@g.us')) return; 
 

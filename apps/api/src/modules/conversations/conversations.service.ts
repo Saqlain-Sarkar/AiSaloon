@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { CustomersService } from '../crm/customers.service';
 import { AppointmentsService } from '../appointments/appointments.service';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 @Injectable()
 export class ConversationsService {
   private readonly logger = new Logger(ConversationsService.name);
@@ -20,93 +20,40 @@ export class ConversationsService {
   }
 
   private async buildSystemPrompt(businessId: string, customerId: string) {
-    // 1. Fetch Business Details
     const business = await this.prisma.business.findUnique({ where: { id: businessId } });
     const branches = await this.prisma.branch.findMany({ where: { businessId } });
-    
-    // 2. Fetch Services
     const services = await this.prisma.service.findMany({ where: { businessId, isActive: true } });
-    const servicesText = services.map(s => `- ${s.name} (ID: ${s.id}) | Price: $${s.price} | Duration: ${s.duration} mins`).join("\n");
-
-    // 3. Fetch Staff
     const staff = await this.prisma.employee.findMany({ where: { businessId, isActive: true } });
-    const staffText = staff.map(s => `- ${s.name} (ID: ${s.id})`).join("\n");
-
-    // 4. Fetch Customer Profile & History
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
-      include: {
-        appointments: {
-          orderBy: { startTime: 'desc' },
-          take: 3,
-          include: { service: true, employee: true }
-        }
-      }
+      include: { appointments: { orderBy: { startTime: 'desc' }, take: 3, include: { service: true, employee: true } } }
     });
 
-    const apptHistory = customer?.appointments.map(a => 
-      `[${a.startTime.toISOString().split('T')[0]}] ${a.service?.name || 'Unknown Service'} with ${a.employee?.name || 'Anyone'} - Status: ${a.status}`
-    ).join("\n") || "No previous appointments.";
+    const bText = branches.map(b => `${b.name} (${b.address})`).join(', ') || 'Main Branch';
+    const sText = services.map(s => `- ${s.name} (ID: ${s.id}) | $${s.price} | ${s.duration}m`).join("\n") || 'None';
+    const stText = staff.map(s => `- ${s.name} (ID: ${s.id})`).join("\n") || 'None';
+    const apptText = customer?.appointments.map(a => `[${a.startTime.toISOString().split('T')[0]}] ${a.service?.name} - ${a.status}`).join("\n") || "None";
 
-    const prompt = `
-You are a friendly, professional AI Salon Receptionist for "${business?.name || 'our salon'}". 
-Your goal is to assist customers natively, naturally, and accurately.
-
-BUSINESS KNOWLEDGE (NEVER HALLUCINATE):
-Branches: ${branches.map(b => b.name + ' (' + b.address + ')').join(', ') || 'Main Branch'}
+    return `Role: Friendly Receptionist for ${business?.name || 'our salon'}.
+Goal: Book appointments and answer queries naturally in user's language/script.
+Knowledge:
+Branches: ${bText}
 Services:
-${servicesText || 'No services listed.'}
-
+${sText}
 Staff:
-${staffText || 'No specific staff listed.'}
-
-CUSTOMER PROFILE:
-Name: ${customer?.name || 'Unknown'}
-Phone: ${customer?.phone || 'Unknown'}
-Total Visits: ${customer?.totalVisits || 0}
+${stText}
+Customer: ${customer?.name || 'Unknown'}, Visits: ${customer?.totalVisits || 0}
 History:
-${apptHistory}
+${apptText}
 
-RULES:
-1. NO VAGUE ANSWERS & NO HALLUCINATIONS: Answer questions about services, pricing, and staff EXPLICITLY using only the BUSINESS KNOWLEDGE provided. If asked about prices or staff, list the exact details from the data. NEVER invent anything.
-2. ACT HUMAN, NOT LIKE AN AI: Speak naturally, warmly, and concisely, as if you are a real human receptionist at the front desk. Do not use robotic phrases.
-3. MULTILINGUAL SUPPORT: You MUST fluently reply in the EXACT language and script the user uses. You fully support English, Hindi, Gujarati, Hinglish, local regional languages, and UAE languages (like Arabic). Switch naturally between them to match the user.
-4. HANDLE AUDIO INPUTS GRACEFULLY: The user's input might be transcribed from voice/audio. Understand and smoothly handle any typos, conversational filler words (um, uh), or informal speech common in voice messages without getting confused.
-5. IMPORTANT DATA EXTRACTION RULE: You MUST accumulate ALL extractedData across the conversation! If the user previously mentioned a Service, and now mentions a Date/Time, your extractedData MUST include BOTH the serviceIds AND the Date/Time! Never drop previously gathered data.
-6. If booking an appointment, you need: Service(s), Date, Time, and (optional) Staff. If multiple services are requested, include ALL their IDs in the serviceIds array.
-   - VERY IMPORTANT: Do NOT guess or invent the Date, Time, or Service. If the user has not explicitly told you these details, you MUST leave them as empty strings "" and set action to "REQUEST_INFO" to ask them.
-   - If information is missing, set action to "REQUEST_INFO" and politely ask for ONLY the missing piece (e.g. "What time would you like to come in?").
-   - Do NOT ask for all missing things at once.
-   - ONLY if ALL information (Service(s), Date, Time) is explicitly provided by the user, set action to "EXECUTE_BOOKING".
-7. CANCELLATION / NO: Understand local words for "No" (e.g. "Nahi", "Na", "No"). If the user says "No" or cancels a booking flow, set action to "NONE", empty the extractedData (reset date/time/serviceIds to empty), acknowledge them, and ask how else you can help.
-8. NEVER mention a Service ID or UUID in your response message. When talking to the customer, ONLY use the Service Name (e.g. say "Beard Trim", never say "service-beard-trim").
-9. For complaints or explicit human requests, set intent to "HUMAN_SUPPORT" and action to "HANDOFF".
-10. For existing customers, personalize your greeting if appropriate.
-11. The current date is ${new Date().toISOString().split('T')[0]}.
-
-RESPONSE FORMAT:
-You MUST respond with a valid JSON object matching this schema exactly:
-{
-  "response": "Your friendly, professional message to the customer. Ask only ONE question at a time.",
-  "intent": "One of: GREETING, BOOK_APPOINTMENT, CANCEL_APPOINTMENT, RESCHEDULE_APPOINTMENT, SERVICE_ENQUIRY, PRICE_ENQUIRY, MEMBERSHIP_ENQUIRY, PACKAGE_ENQUIRY, OFFER_ENQUIRY, WORKING_HOURS, LOCATION, HUMAN_SUPPORT, COMPLAINT, FEEDBACK, UNKNOWN",
-  "confidence": 0.95,
-  "extractedData": {
-    "serviceIds": ["array of UUIDs"],
-    "employeeId": "UUID if mentioned, else empty string",
-    "date": "YYYY-MM-DD if explicitly provided, else empty string",
-    "time": "HH:mm if explicitly provided, else empty string",
-    "customer_name": "Name",
-    "phone": "Phone"
-  },
-  "action": {
-    "type": "EXECUTE_BOOKING" | "CANCEL_BOOKING" | "REQUEST_INFO" | "HANDOFF" | "NONE",
-    "appointmentId": "UUID if applicable"
-  }
-}
-Output ONLY the raw JSON object, without markdown block formatting.
-    `;
-
-    return prompt;
+Rules:
+1. No hallucinations. Only use provided knowledge.
+2. Extract Data: Accumulate previously mentioned ServiceIDs, Date, Time, EmployeeID.
+3. Booking: Require Service(s), Date, Time. If missing, action=REQUEST_INFO. If complete, action=EXECUTE_BOOKING.
+4. Cancellations: Action=NONE, reset extractedData.
+5. Service Names Only: Never mention UUIDs in response.
+6. Handoff: Action=HANDOFF for complaints/human requests.
+7. Date: Today is ${new Date().toISOString().split('T')[0]}.`;
   }
 
   async processMessage(dto: SendMessageDto) {
@@ -148,11 +95,16 @@ Output ONLY the raw JSON object, without markdown block formatting.
 
     // Build Prompt & Messages
     const systemPrompt = await this.buildSystemPrompt(businessId, customer.id);
-    const conversationHistory = await this.getMessages(conversation.id, 1, 15);
+    const rawHistory = await this.prisma.message.findMany({
+      where: { conversationId: conversation.id },
+      orderBy: { createdAt: 'desc' },
+      take: 6
+    });
+    const conversationHistory = rawHistory.reverse();
     
     // Format messages for Gemini Chat
     const aiMessages: any[] = [
-      ...conversationHistory.messages.map((m: any) => ({
+      ...conversationHistory.map((m: any) => ({
         role: m.role === 'CUSTOMER' ? 'user' : 'model',
         parts: [{ text: m.content }],
       })),
@@ -162,6 +114,7 @@ Output ONLY the raw JSON object, without markdown block formatting.
     let aiResponse;
     try {
       this.logger.log("Sending request to Gemini...");
+      const startTime = Date.now();
       const response = await this.ai.models.generateContent({
         model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
         contents: aiMessages,
@@ -170,17 +123,48 @@ Output ONLY the raw JSON object, without markdown block formatting.
           temperature: 0.6,
           maxOutputTokens: 1024,
           responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              response: { type: Type.STRING },
+              intent: { type: Type.STRING },
+              confidence: { type: Type.NUMBER },
+              extractedData: {
+                type: Type.OBJECT,
+                properties: {
+                  serviceIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  employeeId: { type: Type.STRING },
+                  date: { type: Type.STRING },
+                  time: { type: Type.STRING },
+                  customer_name: { type: Type.STRING },
+                  phone: { type: Type.STRING }
+                }
+              },
+              action: {
+                type: Type.OBJECT,
+                properties: {
+                  type: { type: Type.STRING },
+                  appointmentId: { type: Type.STRING }
+                }
+              }
+            },
+            required: ["response", "intent", "action"]
+          }
         }
       });
+      const responseTime = Date.now() - startTime;
+
+      // Log Token Usage
+      const inputTokens = response.usageMetadata?.promptTokenCount || 0;
+      const outputTokens = response.usageMetadata?.candidatesTokenCount || 0;
+      const totalTokens = response.usageMetadata?.totalTokenCount || 0;
+      this.logger.log(`[Metrics] Model: ${response.modelVersion || process.env.GEMINI_MODEL} | Time: ${responseTime}ms | Tokens: In=${inputTokens} Out=${outputTokens} Total=${totalTokens}`);
 
       const responseText = response.text;
       this.logger.log("Received response from Gemini: " + responseText);
       if (!responseText) throw new Error("Parsed response is null");
       
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON object found in response");
-      
-      aiResponse = JSON.parse(jsonMatch[0]);
+      aiResponse = JSON.parse(responseText);
     } catch (error: any) {
       this.logger.error("Gemini AI Error: " + error);
       

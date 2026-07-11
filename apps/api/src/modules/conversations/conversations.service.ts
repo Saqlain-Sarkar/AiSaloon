@@ -45,7 +45,10 @@ ${stText}
 Customer: ${customer?.name || 'Unknown'}, Visits: ${customer?.totalVisits || 0}
 History:
 ${apptText}
-
+${(!customer?.phone || customer.phone.length > 15 || customer.phone.includes('lid') || customer.phone.includes('@') || customer.phone.length < 7) 
+  ? `\nCRITICAL SYSTEM NOTE: The customer's phone number is currently MASKED or UNKNOWN (Current: ${customer?.phone}). You MUST politely ask the customer for their real WhatsApp phone number during the conversation so we can save it for reminders. Extract it into the "phone" field when they provide it.` 
+  : ''}
+  
 Rules:
 1. No hallucinations. Only use provided knowledge.
 2. Extract Data: Accumulate previously mentioned ServiceIDs, Date, Time, EmployeeID.

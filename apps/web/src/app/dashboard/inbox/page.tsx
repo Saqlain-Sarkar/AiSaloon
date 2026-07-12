@@ -6,7 +6,7 @@ import { Search, Bot, User, Phone, CheckCheck, Clock, CheckCircle2 } from "lucid
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { fetchConversations, fetchConversationById, takeoverChat } from "@/lib/api";
+import { fetchConversations, fetchConversationById, takeoverChat, sendManualMessage } from "@/lib/api";
 import { format } from "date-fns";
 
 export default function InboxPage() {
@@ -16,6 +16,8 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(true);
   const [loadingChat, setLoadingChat] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [manualMessage, setManualMessage] = useState("");
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,6 +76,27 @@ export default function InboxPage() {
       ));
     } catch (err) {
       console.error("Failed to toggle AI state", err);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!activeChat || !manualMessage.trim() || sending) return;
+    setSending(true);
+    try {
+      const newMsg = await sendManualMessage(activeChat.id, manualMessage);
+      setChatDetails((prev: any) => ({
+        ...prev,
+        messages: [...(prev?.messages || []), newMsg]
+      }));
+      setManualMessage("");
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    } catch (err) {
+      console.error("Failed to send manual message", err);
+      alert("Failed to send message.");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -209,14 +232,36 @@ export default function InboxPage() {
             
             {/* Chat Input Placeholder (Disabled since AI is managing) */}
             <div className="p-4 border-t border-zinc-200 bg-white/80 backdrop-blur-md">
-              <div className="flex items-center gap-2 opacity-50 cursor-not-allowed">
-                <Input 
-                  disabled
-                  placeholder="AI is currently managing this conversation. Click 'Takeover' to reply manually." 
-                  className="bg-zinc-50 border-zinc-200"
-                />
-                <Button disabled className="bg-blue-600 text-white">Send</Button>
-              </div>
+              {activeChat.isAiManaging !== false ? (
+                <div className="flex items-center gap-2 opacity-50 cursor-not-allowed">
+                  <Input 
+                    disabled
+                    placeholder="AI is currently managing this conversation. Click 'Takeover' to reply manually." 
+                    className="bg-zinc-50 border-zinc-200"
+                  />
+                  <Button disabled className="bg-blue-600 text-white">Send</Button>
+                </div>
+              ) : (
+                <form 
+                  className="flex items-center gap-2"
+                  onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }}
+                >
+                  <Input 
+                    placeholder="Type your message..." 
+                    value={manualMessage}
+                    onChange={(e) => setManualMessage(e.target.value)}
+                    className="bg-white border-zinc-200"
+                    disabled={sending}
+                  />
+                  <Button 
+                    type="submit" 
+                    disabled={sending || !manualMessage.trim()} 
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {sending ? "Sending..." : "Send"}
+                  </Button>
+                </form>
+              )}
             </div>
           </>
         ) : (

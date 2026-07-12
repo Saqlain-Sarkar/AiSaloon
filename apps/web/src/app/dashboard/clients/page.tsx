@@ -35,11 +35,11 @@ export default function ClientsPage() {
       setLoading(true);
       const data = await fetchCustomers();
       
-      // Deduplicate customers by phone number
+      // Deduplicate customers by ID
       const uniqueCustomersMap = new Map();
       (data.customers || []).forEach((c: any) => {
-        if (!uniqueCustomersMap.has(c.phone)) {
-          uniqueCustomersMap.set(c.phone, c);
+        if (!uniqueCustomersMap.has(c.id)) {
+          uniqueCustomersMap.set(c.id, c);
         }
       });
       const uniqueCustomers = Array.from(uniqueCustomersMap.values());

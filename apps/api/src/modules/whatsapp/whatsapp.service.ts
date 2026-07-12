@@ -130,7 +130,9 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       if (!content) return;
 
       // Baileys MD JIDs look like "1234567890:44@s.whatsapp.net". We must strip both @ and :
-      const customerPhone = senderId.split('@')[0].split(':')[0];
+      // However, if the sender uses WhatsApp Privacy (LID), it looks like "155069911670814@lid"
+      const isLid = senderId.includes('@lid');
+      const customerPhone = isLid ? null : senderId.split('@')[0].split(':')[0];
       const customerName = msg.pushName || 'Unknown';
       
       const settings = await this.prisma.setting.findUnique({ where: { businessId: businessId } });
@@ -153,7 +155,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
       const aiResponse = await this.conversationsService.processMessage({
         businessId: businessId, 
-        customerPhone: `+${customerPhone}`,
+        customerPhone: customerPhone ? `+${customerPhone}` : '',
         customerName: customerName,
         source: 'WHATSAPP',
         externalId: senderId,
@@ -168,6 +170,24 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.error(`[${businessId}] Error processing WhatsApp message:`, error);
     }
+  }
+
+  public async getSessionStatus(businessId: string) {
+    const client = this.clients.get(businessId);
+    if (!client) return { status: 'DISCONNECTED' };
+
+    return {
+      status: 'CONNECTED',
+      user: client.user,
+    };
+  }
+
+  async sendMessageToCustomer(businessId: string, remoteJid: string, text: string) {
+    const client = this.clients.get(businessId);
+    if (!client) {
+      throw new Error(`No active WhatsApp session for business ${businessId}`);
+    }
+    await client.sendMessage(remoteJid, { text });
   }
 
   public async sendWhatsappMessage(businessId: string, toPhone: string, message: string) {

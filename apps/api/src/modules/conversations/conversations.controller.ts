@@ -83,4 +83,14 @@ export class ConversationsController {
   ) {
     return this.conversationsService.toggleAiManaging(id, isAiManaging);
   }
+
+  @Post(':id/messages/send')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Send a manual message from the staff to the customer' })
+  async sendManualMessage(
+    @Param('id') id: string,
+    @Body('content') content: string
+  ) {
+    return this.conversationsService.sendManualMessage(id, content);
+  }
 }

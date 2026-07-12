@@ -167,25 +167,24 @@ export class CustomersService {
   }
 
   async findOrCreate(dto: { phone?: string; email?: string; name?: string; businessId: string }) {
-    if (!dto.phone && !dto.email) {
-      throw new Error('Phone or email is required');
-    }
-
     const where: any[] = [];
     if (dto.phone) where.push({ phone: dto.phone, businessId: dto.businessId });
     if (dto.email) where.push({ email: dto.email, businessId: dto.businessId });
 
-    let customer = await this.prisma.customer.findFirst({
-      where: { OR: where },
-    });
+    let customer = null;
+    if (where.length > 0) {
+      customer = await this.prisma.customer.findFirst({
+        where: { OR: where },
+      });
+    }
 
     if (!customer) {
       customer = await this.prisma.customer.create({
         data: {
           businessId: dto.businessId,
           name: dto.name || 'Unknown',
-          phone: dto.phone,
-          email: dto.email,
+          phone: dto.phone || null,
+          email: dto.email || null,
         },
       });
     }

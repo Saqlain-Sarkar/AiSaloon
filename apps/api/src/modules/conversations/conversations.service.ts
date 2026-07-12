@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { CustomersService } from '../crm/customers.service';
 import { AppointmentsService } from '../appointments/appointments.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { GoogleGenAI, Type } from '@google/genai';
 @Injectable()
 export class ConversationsService {
@@ -13,6 +14,8 @@ export class ConversationsService {
     private prisma: PrismaService,
     private customersService: CustomersService,
     private appointmentsService: AppointmentsService,
+    @Inject(forwardRef(() => WhatsappService))
+    private whatsappService: WhatsappService,
   ) {
     this.ai = new GoogleGenAI({ 
       apiKey: process.env.GEMINI_API_KEY,
@@ -388,5 +391,29 @@ Rules:
       where: { id },
       data: { isAiManaging }
     });
+  }
+
+  async sendManualMessage(conversationId: string, content: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { customer: true }
+    });
+    if (!conversation) throw new Error("Conversation not found");
+
+    if (conversation.source === 'WHATSAPP' && conversation.externalId) {
+      await this.whatsappService.sendMessageToCustomer(conversation.businessId, conversation.externalId, content);
+    } else if (conversation.source === 'WHATSAPP' && conversation.customer?.phone) {
+      // Fallback if externalId is missing but phone exists
+      await this.whatsappService.sendWhatsappMessage(conversation.businessId, conversation.customer.phone, content);
+    } else {
+      this.logger.warn(`Could not send message via API for source ${conversation.source}`);
+    }
+
+    // Save Staff Message
+    const message = await this.prisma.message.create({
+      data: { conversationId: conversation.id, role: 'STAFF', content },
+    });
+
+    return message;
   }
 }

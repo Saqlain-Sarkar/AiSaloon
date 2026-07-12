@@ -122,3 +122,10 @@ export async function takeoverChat(id: string, isAiManaging: boolean) {
     body: JSON.stringify({ isAiManaging }),
   });
 }
+
+export async function sendManualMessage(id: string, content: string) {
+  return fetchApi(`/conversations/${id}/messages/send`, {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+}

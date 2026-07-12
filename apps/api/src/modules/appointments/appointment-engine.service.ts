@@ -168,8 +168,8 @@ export class AppointmentEngine {
     const [closeHour, closeMin] = workingHours.closeTime.split(':').map(Number);
     const openMinutes = openHour * 60 + openMin;
     const closeMinutes = closeHour * 60 + closeMin;
-    const startMinutes = startTime.getHours() * 60 + startTime.getMinutes();
-    const endMinutes = endTime.getHours() * 60 + endTime.getMinutes();
+    const startMinutes = startTime.getUTCHours() * 60 + startTime.getUTCMinutes();
+    const endMinutes = endTime.getUTCHours() * 60 + endTime.getUTCMinutes();
 
     if (startMinutes < openMinutes || endMinutes > closeMinutes) {
       return { available: false, reason: 'Outside working hours' };
@@ -243,6 +243,6 @@ export class AppointmentEngine {
       'SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY',
       'THURSDAY', 'FRIDAY', 'SATURDAY',
     ];
-    return days[date.getDay()];
+    return days[date.getUTCDay()];
   }
 }

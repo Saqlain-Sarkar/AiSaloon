@@ -188,7 +188,13 @@ Rules:
       this.logger.log("Received response from Gemini: " + responseText);
       if (!responseText) throw new Error("Parsed response is null");
       
-      aiResponse = JSON.parse(responseText);
+      let jsonStr = responseText.trim();
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonStr = jsonMatch[0];
+      }
+      
+      aiResponse = JSON.parse(jsonStr);
     } catch (error: any) {
       this.logger.error("Gemini AI Error: " + error);
       

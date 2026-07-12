@@ -92,9 +92,9 @@ export default function InboxPage() {
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
-    } catch (err) {
-      console.error("Failed to send manual message", err);
-      alert("Failed to send message.");
+    } catch (e: any) {
+      alert("Failed to send message: " + (e.message || "Unknown error"));
+      console.error("Manual Message Error:", e);
     } finally {
       setSending(false);
     }

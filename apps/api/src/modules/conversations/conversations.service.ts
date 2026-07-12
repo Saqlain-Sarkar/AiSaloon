@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { CustomersService } from '../crm/customers.service';
@@ -401,12 +401,22 @@ Rules:
     if (!conversation) throw new Error("Conversation not found");
 
     if (conversation.source === 'WHATSAPP' && conversation.externalId) {
-      await this.whatsappService.sendMessageToCustomer(conversation.businessId, conversation.externalId, content);
+      try {
+        await this.whatsappService.sendMessageToCustomer(conversation.businessId, conversation.externalId, content);
+      } catch (err: any) {
+        this.logger.error(`Failed to send WhatsApp message: ${err.message}`);
+        throw new BadRequestException(`WhatsApp Error: ${err.message}`);
+      }
     } else if (conversation.source === 'WHATSAPP' && conversation.customer?.phone) {
-      // Fallback if externalId is missing but phone exists
-      await this.whatsappService.sendWhatsappMessage(conversation.businessId, conversation.customer.phone, content);
+      try {
+        await this.whatsappService.sendWhatsappMessage(conversation.businessId, conversation.customer.phone, content);
+      } catch (err: any) {
+        this.logger.error(`Failed to send WhatsApp message fallback: ${err.message}`);
+        throw new BadRequestException(`WhatsApp Error: ${err.message}`);
+      }
     } else {
       this.logger.warn(`Could not send message via API for source ${conversation.source}`);
+      throw new BadRequestException(`Could not send message via API for source ${conversation.source}`);
     }
 
     // Save Staff Message

@@ -92,6 +92,13 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
         
         if (shouldReconnect) {
           const retries = this.retryCounts.get(businessId) || 0;
+          if (retries >= 5) {
+            this.logger.error(`[${businessId}] Too many reconnect attempts (${retries + 1}). Session might be corrupted or replaced. Force clearing session.`);
+            await clearState();
+            this.retryCounts.delete(businessId);
+            return;
+          }
+          
           const delay = Math.min(5000 * Math.pow(1.5, retries), 60000); // Exponential backoff max 60s
           this.retryCounts.set(businessId, retries + 1);
           

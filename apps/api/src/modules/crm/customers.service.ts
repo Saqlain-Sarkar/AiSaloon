@@ -51,8 +51,9 @@ export class CustomersService {
         include: {
           _count: { select: { appointments: true, conversations: true } },
           appointments: {
-            where: { status: 'COMPLETED', paymentStatus: 'PAID' },
-            select: { price: true }
+            where: { status: 'COMPLETED' },
+            orderBy: { startTime: 'desc' },
+            select: { price: true, startTime: true, paymentStatus: true }
           }
         },
       }),
@@ -60,11 +61,19 @@ export class CustomersService {
     ]);
 
     const mappedCustomers = customers.map(c => {
-      const totalSpent = c.appointments.reduce((sum, appt) => sum + Number(appt.price || 0), 0);
+      const completedAppts = c.appointments;
+      const totalVisits = completedAppts.length;
+      const totalSpent = completedAppts
+        .filter(a => a.paymentStatus === 'PAID')
+        .reduce((sum, a) => sum + Number(a.price || 0), 0);
+      const lastVisitAt = completedAppts[0]?.startTime || null;
+      
       const { appointments, ...rest } = c;
       return {
         ...rest,
-        totalSpent
+        totalVisits,
+        totalSpent,
+        lastVisitAt
       };
     });
 

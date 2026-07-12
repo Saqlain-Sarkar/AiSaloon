@@ -17,15 +17,28 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      this.client = new Redis(redisUrl, {
+      let cleanedUrl = redisUrl;
+      const match = redisUrl.match(/(rediss?:\/\/[^\s"']+)/);
+      if (match) {
+        cleanedUrl = match[0];
+      }
+
+      const hasTls = redisUrl.includes('--tls') || cleanedUrl.startsWith('rediss://');
+      const redisOptions: any = {
         maxRetriesPerRequest: 3,
-        retryStrategy(times) {
+        retryStrategy(times: number) {
           if (times > 3) {
             return null; // stop retrying
           }
           return Math.min(times * 500, 2000);
         },
-      });
+      };
+
+      if (hasTls) {
+        redisOptions.tls = { rejectUnauthorized: false };
+      }
+
+      this.client = new Redis(cleanedUrl, redisOptions);
 
       this.client.on('connect', () => {
         this.logger.log('Connected to Upstash Redis successfully.');

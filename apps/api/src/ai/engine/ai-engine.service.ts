@@ -194,7 +194,7 @@ Return ONLY the JSON object, no other text.`;
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(this.configService.get<string>('GEMINI_API_KEY')!);
       const model = genAI.getGenerativeModel({
-        model: this.configService.get<string>('GEMINI_MODEL', 'gemini-2.0-flash'),
+        model: this.configService.get<string>('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
       });
 
       const systemMsg = messages.find((m) => m.role === 'system');

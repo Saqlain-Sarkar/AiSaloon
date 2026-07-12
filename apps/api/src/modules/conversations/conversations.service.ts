@@ -119,7 +119,7 @@ Rules:
       this.logger.log("Sending request to Gemini...");
       const startTime = Date.now();
       const response = await this.ai.models.generateContent({
-        model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+        model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite',
         contents: aiMessages,
         config: {
           systemInstruction: systemPrompt,

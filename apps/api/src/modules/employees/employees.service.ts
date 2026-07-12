@@ -81,26 +81,56 @@ export class EmployeesService {
   }
 
   async getBusinessAnalytics(businessId: string, startDate?: string, endDate?: string) {
-    const where: any = { businessId, deletedAt: null };
+    const where: any = { businessId, deletedAt: null, isActive: true };
     const employees = await this.prisma.employee.findMany({ where, orderBy: { sortOrder: 'asc' } });
 
     const results = await Promise.all(
       employees.map((emp) => this.getSingleEmployeeAnalytics(emp.id, businessId, startDate, endDate))
     );
 
-    return results.sort((a, b) => b.totalRevenue - a.totalRevenue);
+    // Sort: highest revenue first; on tie, most completed appointments first
+    const sorted = results.sort((a, b) => {
+      if (b.totalRevenue !== a.totalRevenue) return b.totalRevenue - a.totalRevenue;
+      return b.completedAppointments - a.completedAppointments;
+    });
+
+    // Business-wide unique customer count (deduped across all staff)
+    const dateFilter: any = { employeeId: { not: null } };
+    if (startDate || endDate) {
+      dateFilter.startTime = {};
+      if (startDate) dateFilter.startTime.gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate) dateFilter.startTime.lte = new Date(`${endDate}T23:59:59.999Z`);
+    }
+    const allAppts = await this.prisma.appointment.findMany({
+      where: { businessId, ...dateFilter },
+      select: { customerId: true, price: true, status: true, paymentStatus: true },
+    });
+    const uniqueCustomers = new Set(allAppts.map((a) => a.customerId)).size;
+    const totalRevenue = allAppts
+      .filter((a) => a.status === 'COMPLETED' && a.paymentStatus === 'PAID')
+      .reduce((s, a) => s + Number(a.price || 0), 0);
+    const totalAppointments = allAppts.length;
+    const totalStaff = employees.length;
+
+    return {
+      summary: { totalStaff, totalRevenue, totalAppointments, uniqueCustomers },
+      employees: sorted,
+    };
   }
+
 
   async getSingleEmployeeAnalytics(employeeId: string, businessId: string, startDate?: string, endDate?: string) {
     const employee = await this.prisma.employee.findUnique({ where: { id: employeeId } });
 
-    const dateFilter: any = { status: { notIn: ['CANCELLED', 'NO_SHOW'] } };
+    // Build date filter — include all statuses for total count; endDate covers full day
+    const dateFilter: any = {};
     if (startDate || endDate) {
       dateFilter.startTime = {};
-      if (startDate) dateFilter.startTime.gte = new Date(startDate);
-      if (endDate) dateFilter.startTime.lte = new Date(endDate);
+      if (startDate) dateFilter.startTime.gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate) dateFilter.startTime.lte = new Date(`${endDate}T23:59:59.999Z`);
     }
 
+    // Fetch ALL appointments in the date range for this employee (all statuses)
     const appointments = await this.prisma.appointment.findMany({
       where: { employeeId, businessId, ...dateFilter },
       include: {
@@ -111,18 +141,27 @@ export class EmployeesService {
     });
 
     const totalAppointments = appointments.length;
+
     const completedAppointments = appointments.filter((a) => a.status === 'COMPLETED');
+
+    // Revenue = only COMPLETED + PAID
     const totalRevenue = completedAppointments
       .filter((a) => a.paymentStatus === 'PAID')
       .reduce((sum, a) => sum + Number(a.price || 0), 0);
-    const totalCustomers = new Set(appointments.map((a) => a.customerId)).size;
-    const avgBookingValue = completedAppointments.length > 0 ? totalRevenue / completedAppointments.length : 0;
 
-    // Service frequency map
+    // Unique customers across all statuses
+    const totalCustomers = new Set(appointments.map((a) => a.customerId)).size;
+
+    // Average = revenue / completed (not total)
+    const avgBookingValue =
+      completedAppointments.length > 0 ? totalRevenue / completedAppointments.length : 0;
+
+    // Service frequency map (all statuses)
     const serviceMap: Record<string, { name: string; count: number }> = {};
     for (const apt of appointments) {
       if (apt.service) {
-        if (!serviceMap[apt.service.id]) serviceMap[apt.service.id] = { name: apt.service.name, count: 0 };
+        if (!serviceMap[apt.service.id])
+          serviceMap[apt.service.id] = { name: apt.service.name, count: 0 };
         serviceMap[apt.service.id].count += 1;
       }
     }
@@ -130,7 +169,7 @@ export class EmployeesService {
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    // Status breakdown
+    // Full status breakdown
     const statusBreakdown = {
       COMPLETED: appointments.filter((a) => a.status === 'COMPLETED').length,
       CONFIRMED: appointments.filter((a) => a.status === 'CONFIRMED').length,

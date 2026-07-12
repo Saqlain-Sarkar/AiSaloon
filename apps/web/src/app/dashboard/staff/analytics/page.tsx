@@ -8,22 +8,51 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency } from "@/lib/utils";
 import { fetchEmployeeAnalyticsSummary } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
-import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { subDays, startOfMonth, endOfMonth } from "date-fns";
 import {
   Trophy,
-  TrendingUp,
   Users,
   DollarSign,
   Calendar,
   Scissors,
   BarChart2,
-  Star,
   CheckCircle2,
   XCircle,
   Clock,
 } from "lucide-react";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type DateRange = "7d" | "30d" | "thisMonth" | "allTime";
+
+interface EmployeeStats {
+  employee: {
+    id: string;
+    name: string;
+    title?: string;
+    color?: string;
+    isActive?: boolean;
+  };
+  totalAppointments: number;
+  completedAppointments: number;
+  totalRevenue: number;
+  totalCustomers: number;
+  avgBookingValue: number;
+  popularServices: { name: string; count: number }[];
+  statusBreakdown: Record<string, number>;
+}
+
+interface AnalyticsData {
+  summary: {
+    totalStaff: number;
+    totalRevenue: number;
+    totalAppointments: number;
+    uniqueCustomers: number;
+  };
+  employees: EmployeeStats[];
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getDateRange(range: DateRange): { startDate?: string; endDate?: string } {
   const now = new Date();
@@ -41,7 +70,12 @@ function getDateRange(range: DateRange): { startDate?: string; endDate?: string 
 }
 
 function Avatar({ name, color }: { name: string; color?: string | null }) {
-  const initials = name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+  const initials = name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
   const bg = color || "#6366f1";
   return (
     <div
@@ -57,13 +91,11 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  sub,
   color = "text-zinc-700",
 }: {
   icon: any;
   label: string;
   value: string;
-  sub?: string;
   color?: string;
 }) {
   return (
@@ -74,28 +106,46 @@ function StatCard({
       <div>
         <p className="text-xs text-zinc-400 font-medium uppercase tracking-wide">{label}</p>
         <p className="text-xl font-bold mt-0.5">{value}</p>
-        {sub && <p className="text-xs text-zinc-400 mt-0.5">{sub}</p>}
       </div>
     </div>
   );
 }
 
+// ─── Page Component ───────────────────────────────────────────────────────────
+
 export default function StaffAnalyticsPage() {
   const { business } = useAuth();
-  const [data, setData] = useState<any[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<DateRange>("30d");
-  const [selected, setSelected] = useState<any | null>(null);
+  const [selected, setSelected] = useState<EmployeeStats | null>(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      setSelected(null);
       const { startDate, endDate } = getDateRange(range);
       const res = await fetchEmployeeAnalyticsSummary(startDate, endDate);
-      setData(Array.isArray(res) ? res : []);
-      setSelected(null);
+      // Handle both old array shape and new { summary, employees } shape
+      if (Array.isArray(res)) {
+        const employees: EmployeeStats[] = res;
+        const totalRevenue = employees.reduce((s, e) => s + e.totalRevenue, 0);
+        const totalAppointments = employees.reduce((s, e) => s + e.totalAppointments, 0);
+        setAnalyticsData({
+          summary: {
+            totalStaff: employees.length,
+            totalRevenue,
+            totalAppointments,
+            uniqueCustomers: employees.reduce((s, e) => s + e.totalCustomers, 0),
+          },
+          employees,
+        });
+      } else {
+        setAnalyticsData(res);
+      }
     } catch (err) {
       console.error("Failed to load employee analytics:", err);
+      setAnalyticsData(null);
     } finally {
       setLoading(false);
     }
@@ -105,11 +155,9 @@ export default function StaffAnalyticsPage() {
     load();
   }, [load]);
 
-  // Summary totals
-  const totalRevenue = data.reduce((s, e) => s + e.totalRevenue, 0);
-  const totalAppointments = data.reduce((s, e) => s + e.totalAppointments, 0);
-  const totalCustomers = data.reduce((s, e) => s + e.totalCustomers, 0);
-  const leaderboard = [...data].slice(0, 3);
+  const summary = analyticsData?.summary;
+  const employees = analyticsData?.employees ?? [];
+  const leaderboard = employees.slice(0, 3);
 
   const ranges: { label: string; value: DateRange }[] = [
     { label: "Last 7 Days", value: "7d" },
@@ -143,19 +191,48 @@ export default function StaffAnalyticsPage() {
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={Users} label="Total Staff" value={String(data.length)} color="text-blue-600" />
+        <StatCard
+          icon={Users}
+          label="Total Staff"
+          value={loading ? "—" : String(summary?.totalStaff ?? 0)}
+          color="text-blue-600"
+        />
         <StatCard
           icon={DollarSign}
           label="Total Revenue"
-          value={formatCurrency(totalRevenue, business?.currency)}
+          value={loading ? "—" : formatCurrency(summary?.totalRevenue ?? 0, business?.currency)}
           color="text-green-600"
         />
-        <StatCard icon={Calendar} label="Appointments" value={String(totalAppointments)} color="text-purple-600" />
-        <StatCard icon={Users} label="Customers Served" value={String(totalCustomers)} color="text-orange-500" />
+        <StatCard
+          icon={Calendar}
+          label="Appointments"
+          value={loading ? "—" : String(summary?.totalAppointments ?? 0)}
+          color="text-purple-600"
+        />
+        <StatCard
+          icon={Users}
+          label="Customers Served"
+          value={loading ? "—" : String(summary?.uniqueCustomers ?? 0)}
+          color="text-orange-500"
+        />
       </div>
 
-      {/* Leaderboard */}
-      {leaderboard.length > 0 && (
+      {/* Loading State */}
+      {loading && (
+        <div className="py-16 text-center text-zinc-400 animate-pulse">Loading performance data...</div>
+      )}
+
+      {/* Empty State */}
+      {!loading && employees.length === 0 && (
+        <Card>
+          <CardContent className="py-16 text-center text-zinc-400">
+            No staff performance data found for the selected period. Assign staff to appointments to start tracking performance.
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Top Performers */}
+      {!loading && leaderboard.length > 0 && (
         <div>
           <h3 className="text-base font-semibold mb-3 flex items-center gap-2">
             <Trophy className="w-5 h-5 text-yellow-500" />
@@ -164,11 +241,12 @@ export default function StaffAnalyticsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {leaderboard.map((emp, i) => {
               const medals = ["🥇", "🥈", "🥉"];
+              const isSelected = selected?.employee?.id === emp.employee.id;
               return (
                 <Card
                   key={emp.employee.id}
-                  className={`cursor-pointer hover:shadow-md transition-shadow ${selected?.employee?.id === emp.employee.id ? "ring-2 ring-zinc-900" : ""}`}
-                  onClick={() => setSelected(selected?.employee?.id === emp.employee.id ? null : emp)}
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${isSelected ? "ring-2 ring-zinc-900" : ""}`}
+                  onClick={() => setSelected(isSelected ? null : emp)}
                 >
                   <CardContent className="p-5">
                     <div className="flex items-center gap-3 mb-4">
@@ -184,7 +262,9 @@ export default function StaffAnalyticsPage() {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
                         <p className="text-zinc-400 text-xs">Revenue</p>
-                        <p className="font-bold text-green-600">{formatCurrency(emp.totalRevenue, business?.currency)}</p>
+                        <p className="font-bold text-green-600">
+                          {formatCurrency(emp.totalRevenue, business?.currency)}
+                        </p>
                       </div>
                       <div>
                         <p className="text-zinc-400 text-xs">Appointments</p>
@@ -192,7 +272,9 @@ export default function StaffAnalyticsPage() {
                       </div>
                       <div>
                         <p className="text-zinc-400 text-xs">Avg Value</p>
-                        <p className="font-semibold">{formatCurrency(emp.avgBookingValue, business?.currency)}</p>
+                        <p className="font-semibold">
+                          {formatCurrency(emp.avgBookingValue, business?.currency)}
+                        </p>
                       </div>
                       <div>
                         <p className="text-zinc-400 text-xs">Customers</p>
@@ -208,7 +290,7 @@ export default function StaffAnalyticsPage() {
       )}
 
       {/* Selected Employee Detail */}
-      {selected && (
+      {!loading && selected && (
         <Card className="border-zinc-900/20">
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -222,7 +304,9 @@ export default function StaffAnalyticsPage() {
           <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 bg-zinc-50 rounded-lg">
               <p className="text-xs text-zinc-400">Total Revenue</p>
-              <p className="text-xl font-bold text-green-600">{formatCurrency(selected.totalRevenue, business?.currency)}</p>
+              <p className="text-xl font-bold text-green-600">
+                {formatCurrency(selected.totalRevenue, business?.currency)}
+              </p>
             </div>
             <div className="p-4 bg-zinc-50 rounded-lg">
               <p className="text-xs text-zinc-400">Completed</p>
@@ -230,7 +314,9 @@ export default function StaffAnalyticsPage() {
             </div>
             <div className="p-4 bg-zinc-50 rounded-lg">
               <p className="text-xs text-zinc-400">Avg Booking Value</p>
-              <p className="text-xl font-bold">{formatCurrency(selected.avgBookingValue, business?.currency)}</p>
+              <p className="text-xl font-bold">
+                {formatCurrency(selected.avgBookingValue, business?.currency)}
+              </p>
             </div>
             <div className="p-4 bg-zinc-50 rounded-lg">
               <p className="text-xs text-zinc-400">Unique Customers</p>
@@ -241,20 +327,29 @@ export default function StaffAnalyticsPage() {
             <div className="col-span-2 md:col-span-2">
               <p className="text-xs text-zinc-400 mb-2 font-semibold uppercase">Appointment Status</p>
               <div className="flex flex-wrap gap-2">
-                {Object.entries(selected.statusBreakdown).map(([status, count]: any) => (
-                  <div
-                    key={status}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border
-                      ${status === "COMPLETED" ? "bg-green-50 text-green-700 border-green-200" :
-                        status === "CANCELLED" || status === "NO_SHOW" ? "bg-red-50 text-red-600 border-red-200" :
-                        "bg-zinc-50 text-zinc-600 border-zinc-200"}`}
-                  >
-                    {status === "COMPLETED" ? <CheckCircle2 className="w-3 h-3" /> :
-                     status === "CANCELLED" || status === "NO_SHOW" ? <XCircle className="w-3 h-3" /> :
-                     <Clock className="w-3 h-3" />}
-                    {status}: {count}
-                  </div>
-                ))}
+                {Object.entries(selected.statusBreakdown)
+                  .filter(([, count]) => count > 0)
+                  .map(([status, count]) => (
+                    <div
+                      key={status}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border
+                        ${status === "COMPLETED"
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : status === "CANCELLED" || status === "NO_SHOW"
+                          ? "bg-red-50 text-red-600 border-red-200"
+                          : "bg-zinc-50 text-zinc-600 border-zinc-200"
+                        }`}
+                    >
+                      {status === "COMPLETED" ? (
+                        <CheckCircle2 className="w-3 h-3" />
+                      ) : status === "CANCELLED" || status === "NO_SHOW" ? (
+                        <XCircle className="w-3 h-3" />
+                      ) : (
+                        <Clock className="w-3 h-3" />
+                      )}
+                      {status}: {count}
+                    </div>
+                  ))}
               </div>
             </div>
 
@@ -263,7 +358,7 @@ export default function StaffAnalyticsPage() {
               <div className="col-span-2 md:col-span-2">
                 <p className="text-xs text-zinc-400 mb-2 font-semibold uppercase">Popular Services</p>
                 <div className="flex flex-col gap-1">
-                  {selected.popularServices.map((s: any, i: number) => (
+                  {selected.popularServices.map((s, i) => (
                     <div key={i} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
                         <Scissors className="w-3 h-3 text-zinc-400" />
@@ -280,28 +375,22 @@ export default function StaffAnalyticsPage() {
       )}
 
       {/* Full Staff Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart2 className="w-5 h-5 text-zinc-500" />
-            All Staff Performance
-          </CardTitle>
-          <CardDescription>Click any row to view detailed stats above.</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="py-16 text-center text-zinc-400 animate-pulse">Loading performance data...</div>
-          ) : data.length === 0 ? (
-            <div className="py-16 text-center text-zinc-400">
-              No data found. Assign staff to appointments to start tracking performance.
-            </div>
-          ) : (
+      {!loading && employees.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart2 className="w-5 h-5 text-zinc-500" />
+              All Staff Performance
+            </CardTitle>
+            <CardDescription>Click any row to view detailed stats above. Ranked by revenue.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Rank</TableHead>
                   <TableHead>Staff Member</TableHead>
-                  <TableHead>Total Appointments</TableHead>
+                  <TableHead>Total Appts</TableHead>
                   <TableHead>Completed</TableHead>
                   <TableHead>Customers</TableHead>
                   <TableHead>Avg Value</TableHead>
@@ -309,11 +398,15 @@ export default function StaffAnalyticsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.map((emp, i) => (
+                {employees.map((emp, i) => (
                   <TableRow
                     key={emp.employee.id}
-                    className={`cursor-pointer hover:bg-zinc-50 ${selected?.employee?.id === emp.employee.id ? "bg-zinc-50" : ""}`}
-                    onClick={() => setSelected(selected?.employee?.id === emp.employee.id ? null : emp)}
+                    className={`cursor-pointer hover:bg-zinc-50 ${
+                      selected?.employee?.id === emp.employee.id ? "bg-zinc-50" : ""
+                    }`}
+                    onClick={() =>
+                      setSelected(selected?.employee?.id === emp.employee.id ? null : emp)
+                    }
                   >
                     <TableCell>
                       <span className="font-bold text-zinc-400">#{i + 1}</span>
@@ -334,17 +427,23 @@ export default function StaffAnalyticsPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>{emp.totalCustomers}</TableCell>
-                    <TableCell>{formatCurrency(emp.avgBookingValue, business?.currency)}</TableCell>
+                    <TableCell>
+                      {emp.completedAppointments > 0
+                        ? formatCurrency(emp.avgBookingValue, business?.currency)
+                        : "—"}
+                    </TableCell>
                     <TableCell className="text-right font-bold text-green-600">
-                      {formatCurrency(emp.totalRevenue, business?.currency)}
+                      {emp.totalRevenue > 0
+                        ? formatCurrency(emp.totalRevenue, business?.currency)
+                        : <span className="text-zinc-400 font-normal">—</span>}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

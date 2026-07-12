@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject, forwardRef } from '@nestjs/common';
 import makeWASocket, { DisconnectReason } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -17,6 +17,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private processedMessages: Set<string> = new Set();
 
   constructor(
+    @Inject(forwardRef(() => ConversationsService))
     private readonly conversationsService: ConversationsService,
     private readonly prisma: PrismaService,
   ) {}

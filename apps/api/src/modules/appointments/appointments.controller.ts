@@ -68,6 +68,13 @@ export class AppointmentsController {
     return this.appointmentsService.findById(id);
   }
 
+  @Patch(':id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update appointment fields (e.g. reassign employee)' })
+  async update(@Param('id') id: string, @Body() dto: { employeeId?: string }) {
+    return this.appointmentsService.update(id, dto);
+  }
+
   @Patch(':id/reschedule')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Reschedule an appointment' })

@@ -192,4 +192,18 @@ export class AppointmentsService {
       data,
     });
   }
+
+  async update(id: string, dto: { employeeId?: string }) {
+    return this.prisma.appointment.update({
+      where: { id },
+      data: {
+        ...(dto.employeeId !== undefined && { employeeId: dto.employeeId }),
+      },
+      include: {
+        customer: { select: { id: true, name: true, phone: true } },
+        employee: { select: { id: true, name: true, title: true, color: true } },
+        service: { select: { id: true, name: true } },
+      },
+    });
+  }
 }

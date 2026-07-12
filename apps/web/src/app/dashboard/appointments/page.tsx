@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { fetchAppointments, fetchCustomers, fetchServices, fetchEmployees, createAppointment, createCustomer, updateAppointmentStatus } from "@/lib/api";
+import { fetchAppointments, fetchCustomers, fetchServices, fetchEmployees, createAppointment, createCustomer, updateAppointmentStatus, updateAppointmentEmployee } from "@/lib/api";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
@@ -79,6 +79,22 @@ export default function AppointmentsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleUpdateEmployee = async (aptId: string, employeeId: string) => {
+    try {
+      await updateAppointmentEmployee(aptId, employeeId);
+      setAppointments((prev) =>
+        prev.map((apt) =>
+          apt.id === aptId
+            ? { ...apt, employeeId, employee: employees.find((e: any) => e.id === employeeId) || apt.employee }
+            : apt
+        )
+      );
+    } catch (err: any) {
+      console.error("Failed to update staff:", err);
+      alert("Failed to reassign staff: " + (err.message || "Unknown error"));
+    }
+  };
 
   const handleUpdateStatus = async (id: string, newStatus: string, pStatus?: string, pMethod?: string) => {
     try {
@@ -460,7 +476,41 @@ export default function AppointmentsPage() {
                     <div className="text-xs text-zinc-500">{apt.customer?.phone || 'No phone'}</div>
                   </TableCell>
                   <TableCell>{apt.service?.name || 'Unknown Service'}</TableCell>
-                  <TableCell>{apt.employee?.name || 'Any Staff'}</TableCell>
+                  <TableCell>
+                    <Select
+                      value={apt.employee?.id || ""}
+                      onValueChange={(val) => handleUpdateEmployee(apt.id, val)}
+                    >
+                      <SelectTrigger className="w-36 h-8 text-xs border-zinc-200 bg-white">
+                        <SelectValue placeholder="Assign staff">
+                          {apt.employee?.name ? (
+                            <span className="flex items-center gap-1.5">
+                              <span
+                                className="w-2 h-2 rounded-full inline-block shrink-0"
+                                style={{ backgroundColor: apt.employee?.color || '#6366f1' }}
+                              />
+                              {apt.employee.name}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-400">Any Staff</span>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-white">
+                        {employees.map((emp: any) => (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            <span className="flex items-center gap-2">
+                              <span
+                                className="w-2 h-2 rounded-full inline-block shrink-0"
+                                style={{ backgroundColor: emp.color || '#6366f1' }}
+                              />
+                              {emp.name}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell>
                     <div>{format(new Date(apt.startTime), 'MMM dd, yyyy')}</div>
                     <div className="text-xs text-zinc-500">{format(new Date(apt.startTime), 'hh:mm a')}</div>

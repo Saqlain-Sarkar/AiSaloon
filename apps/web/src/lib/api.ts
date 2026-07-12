@@ -19,6 +19,13 @@ export async function updateAppointmentStatus(id: string, data: { status: string
   });
 }
 
+export async function updateAppointmentEmployee(id: string, employeeId: string) {
+  return fetchApi(`/appointments/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ employeeId }),
+  });
+}
+
 export async function fetchCustomers() {
   return fetchApi('/customers', { cache: 'no-store' });
 }

@@ -129,3 +129,19 @@ export async function sendManualMessage(id: string, content: string) {
     body: JSON.stringify({ content }),
   });
 }
+
+export async function fetchEmployeeAnalyticsSummary(startDate?: string, endDate?: string) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi(`/employees/analytics/summary${qs}`, { cache: 'no-store' });
+}
+
+export async function fetchSingleEmployeeAnalytics(id: string, startDate?: string, endDate?: string) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi(`/employees/${id}/analytics${qs}`, { cache: 'no-store' });
+}

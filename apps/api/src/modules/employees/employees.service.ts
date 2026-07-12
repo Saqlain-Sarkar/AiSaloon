@@ -79,4 +79,82 @@ export class EmployeesService {
 
     return this.findById(employeeId);
   }
+
+  async getBusinessAnalytics(businessId: string, startDate?: string, endDate?: string) {
+    const where: any = { businessId, deletedAt: null };
+    const employees = await this.prisma.employee.findMany({ where, orderBy: { sortOrder: 'asc' } });
+
+    const results = await Promise.all(
+      employees.map((emp) => this.getSingleEmployeeAnalytics(emp.id, businessId, startDate, endDate))
+    );
+
+    return results.sort((a, b) => b.totalRevenue - a.totalRevenue);
+  }
+
+  async getSingleEmployeeAnalytics(employeeId: string, businessId: string, startDate?: string, endDate?: string) {
+    const employee = await this.prisma.employee.findUnique({ where: { id: employeeId } });
+
+    const dateFilter: any = { status: { notIn: ['CANCELLED', 'NO_SHOW'] } };
+    if (startDate || endDate) {
+      dateFilter.startTime = {};
+      if (startDate) dateFilter.startTime.gte = new Date(startDate);
+      if (endDate) dateFilter.startTime.lte = new Date(endDate);
+    }
+
+    const appointments = await this.prisma.appointment.findMany({
+      where: { employeeId, businessId, ...dateFilter },
+      include: {
+        service: { select: { id: true, name: true } },
+        customer: { select: { id: true, name: true } },
+      },
+      orderBy: { startTime: 'desc' },
+    });
+
+    const totalAppointments = appointments.length;
+    const completedAppointments = appointments.filter((a) => a.status === 'COMPLETED');
+    const totalRevenue = completedAppointments
+      .filter((a) => a.paymentStatus === 'PAID')
+      .reduce((sum, a) => sum + Number(a.price || 0), 0);
+    const totalCustomers = new Set(appointments.map((a) => a.customerId)).size;
+    const avgBookingValue = completedAppointments.length > 0 ? totalRevenue / completedAppointments.length : 0;
+
+    // Service frequency map
+    const serviceMap: Record<string, { name: string; count: number }> = {};
+    for (const apt of appointments) {
+      if (apt.service) {
+        if (!serviceMap[apt.service.id]) serviceMap[apt.service.id] = { name: apt.service.name, count: 0 };
+        serviceMap[apt.service.id].count += 1;
+      }
+    }
+    const popularServices = Object.values(serviceMap)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // Status breakdown
+    const statusBreakdown = {
+      COMPLETED: appointments.filter((a) => a.status === 'COMPLETED').length,
+      CONFIRMED: appointments.filter((a) => a.status === 'CONFIRMED').length,
+      PENDING: appointments.filter((a) => a.status === 'PENDING').length,
+      CANCELLED: appointments.filter((a) => a.status === 'CANCELLED').length,
+      NO_SHOW: appointments.filter((a) => a.status === 'NO_SHOW').length,
+    };
+
+    return {
+      employee: {
+        id: employee?.id,
+        name: employee?.name,
+        title: employee?.title,
+        color: employee?.color,
+        photo: employee?.photo,
+        isActive: employee?.isActive,
+      },
+      totalAppointments,
+      completedAppointments: completedAppointments.length,
+      totalRevenue,
+      totalCustomers,
+      avgBookingValue,
+      popularServices,
+      statusBreakdown,
+    };
+  }
 }

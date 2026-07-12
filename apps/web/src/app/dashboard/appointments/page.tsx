@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { fetchAppointments, fetchCustomers, fetchServices, createAppointment, createCustomer, updateAppointmentStatus } from "@/lib/api";
+import { fetchAppointments, fetchCustomers, fetchServices, fetchEmployees, createAppointment, createCustomer, updateAppointmentStatus } from "@/lib/api";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/components/AuthProvider";
@@ -29,6 +29,7 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [isNewCustomer, setIsNewCustomer] = useState(false);
@@ -36,6 +37,7 @@ export default function AppointmentsPage() {
   const [formData, setFormData] = useState({
     customerId: "",
     serviceId: "",
+    employeeId: "",
     date: format(new Date(), "yyyy-MM-dd"),
     time: "10:00"
   });
@@ -47,10 +49,11 @@ export default function AppointmentsPage() {
   async function loadData() {
     try {
       setLoading(true);
-      const [apts, custs, servs] = await Promise.all([
+      const [apts, custs, servs, emps] = await Promise.all([
         fetchAppointments(),
         fetchCustomers(),
-        fetchServices()
+        fetchServices(),
+        fetchEmployees()
       ]);
       
       // Deduplicate customers by ID
@@ -65,6 +68,7 @@ export default function AppointmentsPage() {
       setAppointments(apts);
       setCustomers(uniqueCustomers);
       setServices(servs);
+      setEmployees(emps);
     } catch (error) {
       console.error("Failed to load data:", error);
     } finally {
@@ -122,6 +126,11 @@ export default function AppointmentsPage() {
         return;
       }
 
+      if (!formData.employeeId) {
+        alert("Please select a staff member.");
+        return;
+      }
+
       const selectedService = services.find(s => s.id === formData.serviceId);
       const duration = selectedService ? selectedService.duration : 30;
       
@@ -129,6 +138,7 @@ export default function AppointmentsPage() {
         branchId: "branch-main",
         customerId: targetCustomerId,
         serviceId: formData.serviceId,
+        employeeId: formData.employeeId,
         startTime: new Date(`${formData.date}T${formData.time}:00`).toISOString(),
         duration,
         source: "STAFF"
@@ -326,7 +336,26 @@ export default function AppointmentsPage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2 mt-4">
+                  <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Staff Member</Label>
+                  <Select value={formData.employeeId} onValueChange={(v) => setFormData({...formData, employeeId: v || ""})}>
+                    <SelectTrigger className="w-full bg-zinc-50/50 border-zinc-200">
+                      <div className="flex flex-1 items-center gap-2 text-left line-clamp-1">
+                        <User className="w-4 h-4 text-zinc-500 shrink-0" />
+                        {formData.employeeId ? (
+                          <span className="capitalize">{employees.find(e => e.id === formData.employeeId)?.name}</span>
+                        ) : (
+                          <span className="text-zinc-500">Choose staff member</span>
+                        )}
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className="bg-white max-h-60 w-[--radix-select-trigger-width]">
+                      {employees.map(e => <SelectItem key={e.id} value={e.id}>{e.name} <span className="text-zinc-400 ml-1 text-xs">({e.title || "Stylist"})</span></SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-4">
                   <div className="grid gap-2">
                     <Label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Date</Label>
                     <div className="relative">

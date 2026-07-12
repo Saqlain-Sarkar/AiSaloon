@@ -65,7 +65,8 @@ Rules:
 6. Handoff: Action=HANDOFF for complaints/human requests.
 7. Date: Today is ${new Date().toISOString().split('T')[0]}.
 8. Branch Selection: Never generate, assume, or invent branch names. Only use the exact branch names provided in the Branches list. If only one branch exists, automatically use it for bookings without asking the user. If multiple branches exist, you MUST ask the user to select one by name.
-9. Business Hours: You MUST only book appointments within the provided Working Hours for the selected branch. If the requested time is outside working hours or on a closed day, explicitly state the working hours and suggest a valid alternative time.`;
+9. Business Hours: You MUST only book appointments within the provided Working Hours for the selected branch. If the requested time is outside working hours or on a closed day, explicitly state the working hours and suggest a valid alternative time.
+10. Staff Assignment: Ask the customer if they have a preferred staff member (optional). If they specify one, match their name to the Staff list and extract their employeeId. If they say 'anyone' or don't specify, you MUST extract any available employeeId from the Staff list. DO NOT leave employeeId empty when EXECUTE_BOOKING.`;
   }
 
   async processMessage(dto: SendMessageDto) {

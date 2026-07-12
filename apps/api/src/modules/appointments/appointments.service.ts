@@ -15,12 +15,30 @@ export class AppointmentsService {
     const startTime = new Date(dto.startTime);
     const endTime = new Date(startTime.getTime() + dto.duration * 60000);
 
+    let assignedEmployeeId = dto.employeeId;
+
+    if (!assignedEmployeeId) {
+      // Auto-assign first available employee
+      const availableEmployees = await this.appointmentEngine.getAvailableEmployees(
+        businessId,
+        dto.branchId,
+        startTime, // Date doesn't strictly matter for the query format inside getAvailableEmployees since it checks by startTime/endTime
+        startTime,
+        endTime
+      );
+      if (availableEmployees.length > 0) {
+        assignedEmployeeId = availableEmployees[0].id;
+      } else {
+        throw new BadRequestException('No staff members are available for this time slot');
+      }
+    }
+
     const isValid = await this.appointmentEngine.validateSlot(
       businessId,
       dto.branchId,
       startTime,
       endTime,
-      dto.employeeId,
+      assignedEmployeeId,
     );
 
     if (!isValid.available) {
@@ -32,7 +50,7 @@ export class AppointmentsService {
         businessId,
         branchId: dto.branchId,
         customerId: dto.customerId,
-        employeeId: dto.employeeId,
+        employeeId: assignedEmployeeId,
         serviceId: dto.serviceId,
         startTime,
         endTime,

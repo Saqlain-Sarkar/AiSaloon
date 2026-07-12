@@ -58,4 +58,29 @@ export class EmployeesController {
   async assignServices(@Param('id') id: string, @Body() dto: { serviceIds: string[] }) {
     return this.employeesService.assignServices(id, dto.serviceIds);
   }
+
+  @Get('analytics/summary')
+  @ApiOperation({ summary: 'Get analytics for all employees in the business' })
+  async getAnalytics(
+    @CurrentUser() user: JwtPayload,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const bizId = user?.businessId;
+    if (!bizId) throw new UnauthorizedException('No business associated with this user');
+    return this.employeesService.getBusinessAnalytics(bizId, startDate, endDate);
+  }
+
+  @Get(':id/analytics')
+  @ApiOperation({ summary: 'Get analytics for a single employee' })
+  async getEmployeeAnalytics(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const bizId = user?.businessId;
+    if (!bizId) throw new UnauthorizedException('No business associated with this user');
+    return this.employeesService.getSingleEmployeeAnalytics(id, bizId, startDate, endDate);
+  }
 }

@@ -50,13 +50,26 @@ export class CustomersService {
         orderBy: { updatedAt: 'desc' },
         include: {
           _count: { select: { appointments: true, conversations: true } },
+          appointments: {
+            where: { status: 'COMPLETED', paymentStatus: 'PAID' },
+            select: { price: true }
+          }
         },
       }),
       this.prisma.customer.count({ where }),
     ]);
 
+    const mappedCustomers = customers.map(c => {
+      const totalSpent = c.appointments.reduce((sum, appt) => sum + Number(appt.price || 0), 0);
+      const { appointments, ...rest } = c;
+      return {
+        ...rest,
+        totalSpent
+      };
+    });
+
     return {
-      customers,
+      customers: mappedCustomers,
       total,
       page: options.page,
       limit: options.limit,
@@ -125,7 +138,9 @@ export class CustomersService {
     });
 
     const totalVisits = appointments.length;
-    const totalSpent = appointments.reduce((sum, a) => sum + Number(a.price || 0), 0);
+    const totalSpent = appointments
+      .filter((a: any) => a.paymentStatus === 'PAID')
+      .reduce((sum, a) => sum + Number(a.price || 0), 0);
     const lastVisit = appointments[0]?.startTime;
     const daysSinceLastVisit = lastVisit
       ? Math.floor((Date.now() - lastVisit.getTime()) / (1000 * 60 * 60 * 24))

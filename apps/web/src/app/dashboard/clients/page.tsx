@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
+import Link from "next/link";
 
 export default function ClientsPage() {
   const { business } = useAuth();
@@ -266,7 +267,9 @@ export default function ClientsPage() {
                     <div className="font-medium text-green-600">{formatCurrency(client.totalSpent, business?.currency)}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">View Profile</Button>
+                    <Link href={`/dashboard/clients/${client.id}`}>
+                      <Button variant="ghost" size="sm">View Profile</Button>
+                    </Link>
                   </TableCell>
                 </TableRow>
               ))}

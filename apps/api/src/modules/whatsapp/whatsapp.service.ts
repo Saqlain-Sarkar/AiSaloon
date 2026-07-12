@@ -132,8 +132,16 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
       // Baileys MD JIDs look like "1234567890:44@s.whatsapp.net". We must strip both @ and :
       // However, if the sender uses WhatsApp Privacy (LID), it looks like "155069911670814@lid"
-      const isLid = senderId.includes('@lid');
-      const customerPhone = isLid ? null : senderId.split('@')[0].split(':')[0];
+      let realPhoneJid = senderId;
+      if (senderId.includes('@lid')) {
+        const alt = msg.key.senderPn || msg.key.participantPn || msg.participant || msg.key.remoteJidAlt;
+        if (alt && alt.includes('@s.whatsapp.net')) {
+          realPhoneJid = alt;
+        }
+      }
+
+      const isLid = realPhoneJid.includes('@lid');
+      const customerPhone = isLid ? null : realPhoneJid.split('@')[0].split(':')[0];
       const customerName = msg.pushName || 'Unknown';
       
       const settings = await this.prisma.setting.findUnique({ where: { businessId: businessId } });

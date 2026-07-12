@@ -115,3 +115,10 @@ export async function fetchConversations() {
 export async function fetchConversationById(id: string) {
   return fetchApi(`/conversations/${id}`, { cache: 'no-store' });
 }
+
+export async function takeoverChat(id: string, isAiManaging: boolean) {
+  return fetchApi(`/conversations/${id}/takeover`, {
+    method: 'POST',
+    body: JSON.stringify({ isAiManaging }),
+  });
+}

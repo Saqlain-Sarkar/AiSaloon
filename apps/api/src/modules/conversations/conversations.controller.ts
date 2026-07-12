@@ -73,4 +73,14 @@ export class ConversationsController {
       limit ? parseInt(limit) : 50,
     );
   }
+
+  @Post(':id/takeover')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Toggle AI managing state for a conversation' })
+  async toggleAiManaging(
+    @Param('id') id: string,
+    @Body('isAiManaging') isAiManaging: boolean
+  ) {
+    return this.conversationsService.toggleAiManaging(id, isAiManaging);
+  }
 }

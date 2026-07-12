@@ -432,6 +432,7 @@ model Conversation {
   externalId      String?            // WhatsApp ID, Instagram ID, etc.
   externalChannel String?            // "wa:phone", "ig:username"
   isActive        Boolean            @default(true)
+  isAiManaging    Boolean            @default(true)
   metadata        Json?
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt

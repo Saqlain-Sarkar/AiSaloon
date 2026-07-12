@@ -35,7 +35,7 @@ export class ConversationsService {
     const apptText = customer?.appointments.map(a => `[${a.startTime.toISOString().split('T')[0]}] ${a.service?.name} - ${a.status}`).join("\n") || "None";
 
     return `Role: Friendly Receptionist for ${business?.name || 'our salon'}.
-Goal: Book appointments and answer queries naturally in user's language/script.
+Goal: Book appointments and answer queries naturally. You MUST fluently understand and reply in the user's language, including Hindi, Hinglish, Gujarati, and other local languages. Match the user's tone and language.
 Knowledge:
 Branches: ${bText}
 Services:
@@ -45,9 +45,6 @@ ${stText}
 Customer: ${customer?.name || 'Unknown'}, Visits: ${customer?.totalVisits || 0}
 History:
 ${apptText}
-${(!customer?.phone || customer.phone.length > 15 || customer.phone.includes('lid') || customer.phone.includes('@') || customer.phone.length < 7) 
-  ? `\nCRITICAL SYSTEM NOTE: The customer's phone number is currently MASKED or UNKNOWN (Current: ${customer?.phone}). You MUST politely ask the customer for their real WhatsApp phone number during the conversation so we can save it for reminders. Extract it into the "phone" field when they provide it.` 
-  : ''}
   
 Rules:
 1. No hallucinations. Only use provided knowledge.
@@ -107,6 +104,11 @@ Rules:
     await this.prisma.message.create({
       data: { conversationId: conversation.id, role: 'CUSTOMER', content: dto.content },
     });
+
+    if (!conversation.isAiManaging) {
+      this.logger.log(`Skipping AI response for conversation ${conversation.id} because it is managed by a human.`);
+      return { conversationId: conversation.id, message: "", intent: "IGNORED", action: null, customer };
+    }
 
     if (!process.env.GEMINI_API_KEY || process.env.DISABLE_AI === 'true') {
       return { conversationId: conversation.id, message: "AI Processing is disabled.", intent: "UNKNOWN", action: null, customer };
@@ -379,5 +381,12 @@ Rules:
       this.prisma.message.count({ where: { conversationId } }),
     ]);
     return { messages, total, page, limit };
+  }
+
+  async toggleAiManaging(id: string, isAiManaging: boolean) {
+    return this.prisma.conversation.update({
+      where: { id },
+      data: { isAiManaging }
+    });
   }
 }

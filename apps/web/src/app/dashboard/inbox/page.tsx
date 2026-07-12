@@ -6,7 +6,7 @@ import { Search, Bot, User, Phone, CheckCheck, Clock, CheckCircle2 } from "lucid
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { fetchConversations, fetchConversationById } from "@/lib/api";
+import { fetchConversations, fetchConversationById, takeoverChat } from "@/lib/api";
 import { format } from "date-fns";
 
 export default function InboxPage() {
@@ -62,6 +62,20 @@ export default function InboxPage() {
       (c.customer?.phone || "").includes(lower)
     );
   }, [conversations, searchTerm]);
+
+  const handleTakeoverToggle = async () => {
+    if (!activeChat) return;
+    const currentStatus = activeChat.isAiManaging ?? true;
+    try {
+      await takeoverChat(activeChat.id, !currentStatus);
+      setActiveChat({ ...activeChat, isAiManaging: !currentStatus });
+      setConversations(conversations.map(c => 
+        c.id === activeChat.id ? { ...c, isAiManaging: !currentStatus } : c
+      ));
+    } catch (err) {
+      console.error("Failed to toggle AI state", err);
+    }
+  };
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-6">
@@ -131,13 +145,25 @@ export default function InboxPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 hidden sm:flex">
-                  Takeover Chat
+                <Button 
+                  onClick={handleTakeoverToggle}
+                  variant="outline" 
+                  size="sm" 
+                  className={`border-zinc-200 text-zinc-600 hover:text-zinc-900 hidden sm:flex ${activeChat.isAiManaging === false ? 'bg-zinc-100 hover:bg-zinc-200' : 'hover:bg-zinc-100'}`}
+                >
+                  {activeChat.isAiManaging === false ? 'Restore AI Bot' : 'Takeover Chat'}
                 </Button>
-                <Badge className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20">
-                  <Bot className="w-3 h-3 mr-1" />
-                  AI Managing
-                </Badge>
+                {activeChat.isAiManaging !== false ? (
+                  <Badge className="bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/20">
+                    <Bot className="w-3 h-3 mr-1" />
+                    AI Managing
+                  </Badge>
+                ) : (
+                  <Badge className="bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 border-orange-500/20">
+                    <User className="w-3 h-3 mr-1" />
+                    Human Chat
+                  </Badge>
+                )}
               </div>
             </div>
 

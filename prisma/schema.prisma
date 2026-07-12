@@ -448,6 +448,17 @@ model Conversation {
   @@map("conversations")
 }
 
+// ─── WhatsApp Session Storage ────────────────────────────────
+model WhatsAppSession {
+  id         String @id @default(cuid())
+  businessId String
+  keyId      String
+  data       String @db.Text
+
+  @@unique([businessId, keyId])
+  @@map("whatsapp_sessions")
+}
+
 model Message {
   id             String       @id @default(cuid())
   conversationId String

@@ -1,11 +1,12 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
+import makeWASocket, { DisconnectReason } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConversationsService } from '../conversations/conversations.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import pino from 'pino';
+import { usePrismaAuthState } from './prisma-auth';
 
 @Injectable()
 export class WhatsappService implements OnModuleInit, OnModuleDestroy {
@@ -23,14 +24,14 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.logger.log('Initializing WhatsApp Service Manager (Baileys)...');
     try {
-      if (fs.existsSync('./whatsapp-auth')) {
-        const dirs = fs.readdirSync('./whatsapp-auth', { withFileTypes: true })
-          .filter(dirent => dirent.isDirectory() && dirent.name.startsWith('session-'))
-          .map(dirent => dirent.name.replace('session-', ''));
-          
-        for (const businessId of dirs) {
-          this.logger.log(`Auto-starting WhatsApp client for business: ${businessId}`);
-          await this.initializeClient(businessId);
+      const businesses = await this.prisma.business.findMany({ select: { id: true } });
+      for (const b of businesses) {
+        const sessions = await this.prisma.whatsAppSession.findFirst({
+          where: { businessId: b.id }
+        });
+        if (sessions) {
+          this.logger.log(`Auto-starting WhatsApp client for business: ${b.id}`);
+          await this.initializeClient(b.id);
         }
       }
     } catch (e) {
@@ -52,9 +53,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
     this.logger.log(`Starting new WhatsApp Client for business: ${businessId}`);
     
-    // We use a specific directory per businessId for persistent sessions
-    const sessionDir = path.join('./whatsapp-auth', `session-${businessId}`);
-    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+    const { state, saveCreds, clearState } = await usePrismaAuthState(this.prisma, businessId);
 
     const client = makeWASocket({
       auth: state,
@@ -67,7 +66,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
 
     client.ev.on('creds.update', saveCreds);
 
-    client.ev.on('connection.update', (update) => {
+    client.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
       
       if (qr) {
@@ -90,9 +89,8 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
             this.initializeClient(businessId);
           }, 5000);
         } else {
-          // Logged out, clean up session directory
           this.logger.log(`[${businessId}] User logged out. Cleaning up session.`);
-          fs.rmSync(sessionDir, { recursive: true, force: true });
+          await clearState();
         }
       } else if (connection === 'open') {
         this.logger.log(`[${businessId}] WhatsApp Client is Ready! AI is now connected.`);

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { ArrowLeft, CheckCircle2, Loader2, Sparkles, Clock, Calendar as CalendarIcon, User } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { fetchApi } from "@/lib/apiClient";
 
 export default function BookAppointment() {
@@ -21,6 +21,7 @@ export default function BookAppointment() {
   const [direction, setDirection] = useState(1); // 1 for forward, -1 for backward
 
   // Data fetching state
+  const [business, setBusiness] = useState<any>(null);
   const [services, setServices] = useState<any[]>([]);
   const [availableSlots, setAvailableSlots] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,19 +41,22 @@ export default function BookAppointment() {
       return;
     }
     
-    // Fetch real services from API
-    // The endpoint should be public or allow querying by businessId
-    fetchApi(`/services?businessId=${businessId}`)
-      .then(res => setServices(res))
-      .catch(err => {
-        console.error("Failed to fetch services", err);
-        // Fallback dummy data if API is not ready for public access
+    Promise.all([
+      fetchApi(`/business/${businessId}`).catch(() => null),
+      fetchApi(`/services?businessId=${businessId}`).catch(() => [])
+    ]).then(([biz, srvs]) => {
+      if (biz) setBusiness(biz);
+      
+      if (srvs && srvs.length > 0) {
+        setServices(srvs);
+      } else {
+        // Fallback dummy data if API is not ready
         setServices([
           { id: "haircut", name: "Classic Haircut", duration: 45, price: 40 },
           { id: "color", name: "Hair Coloring", duration: 120, price: 120 },
         ]);
-      })
-      .finally(() => setIsLoading(false));
+      }
+    }).finally(() => setIsLoading(false));
   }, [businessId]);
 
   // When date changes, fetch available slots (using AppointmentEngine)
@@ -235,12 +239,12 @@ export default function BookAppointment() {
                       className="p-4 rounded-2xl border border-zinc-800 bg-zinc-900 hover:border-purple-500 hover:bg-zinc-800/50 cursor-pointer transition-all flex justify-between items-center group"
                     >
                       <div>
-                        <h3 className="font-semibold text-white group-hover:text-purple-400 transition-colors">{s.name}</h3>
+                        <div className="font-semibold text-white">{s.name}</div>
                         <p className="text-sm text-zinc-500 mt-1 flex items-center gap-1">
                           <Clock className="w-3 h-3" /> {s.duration} min
                         </p>
                       </div>
-                      <div className="text-purple-400 font-medium">${s.price}</div>
+                      <div className="text-purple-400 font-medium">{formatCurrency(s.price, business?.currency)}</div>
                     </div>
                   ))}
                   {services.length === 0 && (
@@ -368,9 +372,9 @@ export default function BookAppointment() {
 
                   <div className="mt-8 bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
                     <h4 className="text-sm font-medium text-white mb-2">Summary</h4>
-                    <div className="flex justify-between text-sm text-zinc-400 mb-1">
-                      <span>{selectedService?.name}</span>
-                      <span className="text-white">${selectedService?.price}</span>
+                    <div className="flex justify-between items-center text-sm font-medium">
+                      <span className="text-zinc-400">Total</span>
+                      <span className="text-white">{formatCurrency(selectedService?.price, business?.currency)}</span>
                     </div>
                     <div className="flex justify-between text-sm text-zinc-400">
                       <span>{date ? format(date, "MMM d, yyyy") : ""} at {time}</span>

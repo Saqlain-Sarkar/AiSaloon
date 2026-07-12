@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { TrendingUp, Users, CalendarCheck, DollarSign } from "lucide-react";
 import { fetchAnalyticsRevenue, fetchAnalyticsPopularServices, fetchServices } from "@/lib/api";
+import { formatCurrency } from "@/lib/utils";
+import { useAuth } from "@/components/AuthProvider";
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#ec4899", "#10b981", "#f59e0b", "#ef4444"];
 
@@ -17,6 +19,7 @@ const aiStatsDummy = [
 ];
 
 export default function AnalyticsPage() {
+  const { business } = useAuth();
   const [revenueData, setRevenueData] = useState<any[]>([]);
   const [serviceData, setServiceData] = useState<any[]>([]);
   const [summary, setSummary] = useState({ totalRevenue: 0, appointments: 0, newCustomers: 32, conversion: 36.2 });
@@ -93,8 +96,8 @@ export default function AnalyticsPage() {
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[
-          { title: "Total Revenue (7d)", value: `₹${summary.totalRevenue.toLocaleString()}`, icon: DollarSign, trend: "Live", color: "text-blue-500" },
-          { title: "Appointments (7d)", value: summary.appointments.toString(), icon: CalendarCheck, trend: "Live", color: "text-emerald-500" },
+          { title: "Total Revenue (7d)", value: formatCurrency(summary.totalRevenue, business?.currency), icon: DollarSign, trend: "Live", color: "text-blue-500" },
+          { title: "AI Appointments", value: summary.appointments.toString(), icon: CalendarCheck, trend: "+12%", color: "text-emerald-500" },
           { title: "New Customers", value: summary.newCustomers.toString(), icon: Users, trend: "Static", color: "text-purple-500" },
           { title: "AI Conversion Rate", value: `${summary.conversion}%`, icon: TrendingUp, trend: "Static", color: "text-pink-500" },
         ].map((stat, idx) => (
@@ -130,19 +133,19 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f4f4f5" />
                 <XAxis dataKey="name" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `₹${value/1000}k`} />
+                <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => formatCurrency(value, business?.currency)} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e4e4e7', color: '#18181b', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  itemStyle={{ color: '#3b82f6' }}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  formatter={(value: any) => [formatCurrency(value, business?.currency), "Revenue"]}
                 />
                 <Area type="monotone" dataKey="total" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
               </AreaChart>

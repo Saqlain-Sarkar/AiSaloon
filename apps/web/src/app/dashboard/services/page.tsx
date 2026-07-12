@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchServices, createService, updateService, deleteService, fetchCategories } from "@/lib/api";
+import { formatCurrency } from "@/lib/utils";
+import { useAuth } from "@/components/AuthProvider";
 
 interface Service {
   id: string;
@@ -38,6 +40,7 @@ const COLOR_MAP: Record<string, string> = {
 };
 
 export default function ServicesPage() {
+  const { business } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [services, setServices] = useState<Service[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -197,7 +200,7 @@ export default function ServicesPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="price">Price ($)</Label>
+                  <Label htmlFor="price">Price ({business?.currency || 'USD'})</Label>
                   <Input 
                     id="price" 
                     type="number"
@@ -269,12 +272,12 @@ export default function ServicesPage() {
                     <Badge variant="outline" className="border-zinc-200 text-zinc-600 bg-zinc-50">
                       {categoryName}
                     </Badge>
-                    <span className="text-sm text-zinc-500">{service.duration} min</span>
                   </div>
                   
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-100">
                     <span className="text-sm text-zinc-500">Price</span>
-                    <span className="text-lg font-bold text-zinc-900">${Number(service.price).toFixed(2)}</span>
+                    <span className="text-lg font-bold text-zinc-900">{formatCurrency(service.price, business?.currency)}</span>
+                    <span className="text-sm text-zinc-500 ml-1">/ {service.duration}m</span>
                   </div>
                 </CardContent>
               </Card>

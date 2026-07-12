@@ -13,16 +13,28 @@ interface User {
   businessId: string;
 }
 
-interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
-  logout: () => void;
+interface Business {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  currency: string;
+  timezone: string;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, isLoading: true, logout: () => {} });
+interface AuthContextType {
+  user: User | null;
+  business: Business | null;
+  isLoading: boolean;
+  logout: () => void;
+  setBusiness: (business: Business) => void;
+}
+
+const AuthContext = createContext<AuthContextType>({ user: null, business: null, isLoading: true, logout: () => {}, setBusiness: () => {} });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [business, setBusiness] = useState<Business | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
@@ -46,9 +58,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        // Fetch current user from API
-        // For now, if there's no /me endpoint, we decode token or just trust it.
-        // Let's assume we decode the JWT token directly for efficiency on the frontend
         const payloadBase64 = token.split('.')[1];
         if (payloadBase64) {
             let base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
@@ -62,6 +71,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 role: decodedPayload.role,
                 businessId: decodedPayload.businessId,
             });
+            
+            // Fetch business configuration
+            if (decodedPayload.businessId) {
+              const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://aisaloon.onrender.com/api/v1"}/business/${decodedPayload.businessId}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+              });
+              if (res.ok) {
+                const b = await res.json();
+                setBusiness(b);
+              }
+            }
         }
       } catch (error) {
         console.error("Auth validation failed", error);
@@ -88,10 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem("accessToken");
     setUser(null);
+    setBusiness(null);
     router.push("/auth/login");
   };
 
-  return <AuthContext.Provider value={{ user, isLoading, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, business, isLoading, logout, setBusiness }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

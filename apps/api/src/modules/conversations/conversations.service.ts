@@ -56,7 +56,8 @@ Rules:
 4. Cancellations: Action=NONE, reset extractedData.
 5. Service Names Only: Never mention UUIDs in response.
 6. Handoff: Action=HANDOFF for complaints/human requests.
-7. Date: Today is ${new Date().toISOString().split('T')[0]}.`;
+7. Date: Today is ${new Date().toISOString().split('T')[0]}.
+8. Branch Selection: Never generate, assume, or invent branch names. Only use the exact branch names provided in the Branches list. If only one branch exists, automatically use it for bookings without asking the user. If multiple branches exist, you MUST ask the user to select one by name.`;
   }
 
   async processMessage(dto: SendMessageDto) {

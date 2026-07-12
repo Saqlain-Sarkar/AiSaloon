@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Search, Plus, Mail, User, Phone, Filter } from "lucide-react";
 import { fetchCustomers, createCustomer } from "@/lib/api";
 import { format } from "date-fns";
+import { formatCurrency } from "@/lib/utils";
+import { useAuth } from "@/components/AuthProvider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { 
@@ -22,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function ClientsPage() {
+  const { business } = useAuth();
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -259,8 +262,8 @@ export default function ClientsPage() {
                   <TableCell>
                     <div className="text-sm">{client.lastVisitAt ? format(new Date(client.lastVisitAt), 'MMM dd, yyyy') : 'Never'}</div>
                   </TableCell>
-                  <TableCell>
-                    <div className="font-medium text-green-600">${Number(client.totalSpent || 0).toFixed(2)}</div>
+                  <TableCell className="text-right">
+                    <div className="font-medium text-green-600">{formatCurrency(client.totalSpent, business?.currency)}</div>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm">View Profile</Button>

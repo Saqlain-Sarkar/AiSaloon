@@ -12,12 +12,14 @@ import { isSameDay, isWithinInterval, startOfDay, endOfDay, subDays, startOfMont
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
+import { useAuth } from "@/components/AuthProvider";
 
 type DateRangeType = "Today" | "Yesterday" | "Last 7 Days" | "This Month" | "Last Month" | "Custom Range" | "All Time";
 
 export default function DashboardPage() {
+  const { business } = useAuth();
   const [dateRange, setDateRange] = useState<DateRangeType>("All Time");
   const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -193,7 +195,7 @@ export default function DashboardPage() {
             <DollarSign className="h-4 w-4 text-zinc-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${kpis.revenue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(kpis.revenue, business?.currency)}</div>
             <p className="text-xs text-zinc-500">From confirmed/completed</p>
           </CardContent>
         </Card>
@@ -236,7 +238,7 @@ export default function DashboardPage() {
                       </TableCell>
                       <TableCell>
                         <div>{apt.service?.name || 'Unknown'}</div>
-                        <div className="text-xs text-zinc-500">${Number(apt.service?.price || 0).toFixed(2)}</div>
+                        <div className="text-xs text-zinc-500">{formatCurrency(apt.service?.price, business?.currency)}</div>
                       </TableCell>
                       <TableCell>
                         <div>{format(new Date(apt.startTime), "MMM dd, yyyy")}</div>

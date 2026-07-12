@@ -21,8 +21,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { fetchAppointments, fetchCustomers, fetchServices, createAppointment, createCustomer, updateAppointmentStatus } from "@/lib/api";
 import { format } from "date-fns";
+import { formatCurrency } from "@/lib/utils";
+import { useAuth } from "@/components/AuthProvider";
 
 export default function AppointmentsPage() {
+  const { business } = useAuth();
   const [appointments, setAppointments] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
@@ -318,7 +321,7 @@ export default function AppointmentsPage() {
                       </div>
                     </SelectTrigger>
                     <SelectContent className="bg-white max-h-60 w-[--radix-select-trigger-width]">
-                      {services.map(s => <SelectItem key={s.id} value={s.id}>{s.name} <span className="text-zinc-400 ml-1 text-xs">(${s.price})</span></SelectItem>)}
+                      {services.map(s => <SelectItem key={s.id} value={s.id}>{s.name} <span className="text-zinc-400 ml-1 text-xs">({formatCurrency(s.price, business?.currency)})</span></SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

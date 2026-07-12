@@ -62,6 +62,15 @@ export class BranchesService {
     });
   }
 
+  async setWorkingHoursBatch(branchId: string, dtos: any[]) {
+    const results = [];
+    for (const dto of dtos) {
+      const res = await this.setWorkingHours(branchId, dto);
+      results.push(res);
+    }
+    return results;
+  }
+
   async addHoliday(branchId: string, dto: { name: string; date: string; isRecurring?: boolean }) {
     return this.prisma.holiday.create({
       data: {

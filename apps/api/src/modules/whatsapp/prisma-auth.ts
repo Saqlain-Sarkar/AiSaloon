@@ -2,17 +2,21 @@ import { AuthenticationCreds, SignalKeyStore, initAuthCreds, BufferJSON } from '
 import { PrismaClient } from '@prisma/client';
 
 export const usePrismaAuthState = async (prisma: PrismaClient, businessId: string) => {
-  const writeData = async (data: any, keyId: string) => {
-    try {
-      const dataStr = JSON.stringify(data, BufferJSON.replacer);
-      await prisma.whatsAppSession.upsert({
-        where: { businessId_keyId: { businessId, keyId } },
-        create: { businessId, keyId, data: dataStr },
-        update: { data: dataStr },
-      });
-    } catch (e) {
-      console.error(`Error saving auth state for ${businessId}, key ${keyId}:`, e);
-    }
+  let writeQueue: Promise<void> = Promise.resolve();
+  const writeData = (data: any, keyId: string) => {
+    writeQueue = writeQueue.then(async () => {
+      try {
+        const dataStr = JSON.stringify(data, BufferJSON.replacer);
+        await prisma.whatsAppSession.upsert({
+          where: { businessId_keyId: { businessId, keyId } },
+          create: { businessId, keyId, data: dataStr },
+          update: { data: dataStr },
+        });
+      } catch (e) {
+        console.error(`Error saving auth state for ${businessId}, key ${keyId}:`, e);
+      }
+    });
+    return writeQueue;
   };
 
   const readData = async (keyId: string) => {
@@ -30,14 +34,17 @@ export const usePrismaAuthState = async (prisma: PrismaClient, businessId: strin
     }
   };
 
-  const removeData = async (keyId: string) => {
-    try {
-      await prisma.whatsAppSession.delete({
-        where: { businessId_keyId: { businessId, keyId } },
-      });
-    } catch (e) {
-      // Ignore if not found
-    }
+  const removeData = (keyId: string) => {
+    writeQueue = writeQueue.then(async () => {
+      try {
+        await prisma.whatsAppSession.delete({
+          where: { businessId_keyId: { businessId, keyId } },
+        });
+      } catch (e) {
+        // Ignore if not found
+      }
+    });
+    return writeQueue;
   };
 
   let creds: AuthenticationCreds;

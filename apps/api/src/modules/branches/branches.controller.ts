@@ -39,6 +39,9 @@ export class BranchesController {
   @Post(':id/working-hours')
   @ApiOperation({ summary: 'Set working hours' })
   async setWorkingHours(@Param('id') id: string, @Body() dto: any) {
+    if (Array.isArray(dto)) {
+      return this.branchesService.setWorkingHoursBatch(id, dto);
+    }
     return this.branchesService.setWorkingHours(id, dto);
   }
 

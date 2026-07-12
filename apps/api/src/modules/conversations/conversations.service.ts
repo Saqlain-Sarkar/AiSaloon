@@ -32,7 +32,13 @@ export class ConversationsService {
       include: { appointments: { orderBy: { startTime: 'desc' }, take: 3, include: { service: true, employee: true } } }
     });
 
-    const bText = branches.map(b => `${b.name} (${b.address})`).join(', ') || 'Main Branch';
+    const bText = branches.map(b => {
+      let whText = 'Main Branch';
+      if ((b as any).workingHours && (b as any).workingHours.length > 0) {
+        whText = (b as any).workingHours.map((w: any) => `${w.dayOfWeek}: ${w.isClosed ? 'Closed' : `${w.openTime}-${w.closeTime}`}`).join(', ');
+      }
+      return `${b.name} (${b.address}) - Hours: ${whText}`;
+    }).join('\n');
     const sText = services.map(s => `- ${s.name} (ID: ${s.id}) | $${s.price} | ${s.duration}m`).join("\n") || 'None';
     const stText = staff.map(s => `- ${s.name} (ID: ${s.id})`).join("\n") || 'None';
     const apptText = customer?.appointments.map(a => `[${a.startTime.toISOString().split('T')[0]}] ${a.service?.name} - ${a.status}`).join("\n") || "None";
@@ -40,7 +46,8 @@ export class ConversationsService {
     return `Role: Friendly Receptionist for ${business?.name || 'our salon'}.
 Goal: Book appointments and answer queries naturally. You MUST fluently understand and reply in the user's language, including Hindi, Hinglish, Gujarati, and other local languages. Match the user's tone and language.
 Knowledge:
-Branches: ${bText}
+Branches & Working Hours:
+${bText}
 Services:
 ${sText}
 Staff:
@@ -57,7 +64,8 @@ Rules:
 5. Service Names Only: Never mention UUIDs in response.
 6. Handoff: Action=HANDOFF for complaints/human requests.
 7. Date: Today is ${new Date().toISOString().split('T')[0]}.
-8. Branch Selection: Never generate, assume, or invent branch names. Only use the exact branch names provided in the Branches list. If only one branch exists, automatically use it for bookings without asking the user. If multiple branches exist, you MUST ask the user to select one by name.`;
+8. Branch Selection: Never generate, assume, or invent branch names. Only use the exact branch names provided in the Branches list. If only one branch exists, automatically use it for bookings without asking the user. If multiple branches exist, you MUST ask the user to select one by name.
+9. Business Hours: You MUST only book appointments within the provided Working Hours for the selected branch. If the requested time is outside working hours or on a closed day, explicitly state the working hours and suggest a valid alternative time.`;
   }
 
   async processMessage(dto: SendMessageDto) {
@@ -72,6 +80,18 @@ Rules:
       businessId = business.id;
     }
 
+    // Extract and sanitize the real phone number first
+    let phoneToSave = dto.customerPhone || (dto as any).phone;
+    if (!phoneToSave && dto.externalId) {
+      phoneToSave = dto.externalId.split('@')[0];
+    }
+    if (phoneToSave) {
+      phoneToSave = phoneToSave.split(':')[0]; // Remove Baileys linked device suffix
+      if (!phoneToSave.startsWith('+') && /^\d/.test(phoneToSave)) {
+        phoneToSave = `+${phoneToSave}`;
+      }
+    }
+
     // Find customer by looking up any previous conversation with this exact externalId (WhatsApp JID/LID)
     let previousConversation = await this.prisma.conversation.findFirst({
       where: { externalId: dto.externalId, source: dto.source || 'WHATSAPP', businessId },
@@ -83,12 +103,20 @@ Rules:
       customer = await this.prisma.customer.findUnique({
         where: { id: previousConversation.customerId }
       });
+      
+      // Fix for previously corrupted customers with no phone
+      if (customer && phoneToSave && (!customer.phone || customer.phone === '')) {
+         customer = await this.prisma.customer.update({
+           where: { id: customer.id },
+           data: { phone: phoneToSave }
+         });
+      }
     }
 
-    // If no previous conversation, fallback to finding or creating by the initial phone number (even if masked)
+    // If no previous conversation, fallback to finding or creating by the initial phone number
     if (!customer) {
       customer = await this.customersService.findOrCreate({
-        phone: dto.customerPhone,
+        phone: phoneToSave,
         name: dto.customerName,
         businessId,
       });
@@ -258,30 +286,35 @@ Rules:
           const timeStr = aiResponse.extractedData.time.substring(0, 5); // Ensure HH:mm format
           let currentStartTime = new Date(`${aiResponse.extractedData.date}T${timeStr}:00.000Z`);
           
-          for (const service of requestedServices) {
-            await this.appointmentsService.create(businessId, {
-              branchId: branch.id,
-              customerId: customer.id,
-              serviceId: service.id,
-              employeeId: aiResponse.extractedData.employeeId || undefined,
-              startTime: currentStartTime.toISOString(),
-              duration: service.duration,
-              source: 'AI_CHAT',
-              isWalkIn: false
-            });
-            // Advance the start time for the next consecutive service
-            currentStartTime = new Date(currentStartTime.getTime() + service.duration * 60000);
+          let successfullyBooked = [];
+          try {
+            for (const service of requestedServices) {
+              await this.appointmentsService.create(businessId, {
+                branchId: branch.id,
+                customerId: customer.id,
+                serviceId: service.id,
+                employeeId: aiResponse.extractedData.employeeId || undefined,
+                startTime: currentStartTime.toISOString(),
+                duration: service.duration,
+                source: 'AI_CHAT',
+                isWalkIn: false
+              });
+              successfullyBooked.push(service.name);
+              // Advance the start time for the next consecutive service
+              currentStartTime = new Date(currentStartTime.getTime() + service.duration * 60000);
+            }
+            const serviceNames = successfullyBooked.join(" and ");
+            aiResponse.response = `Perfect! I've successfully booked your ${serviceNames} for ${aiResponse.extractedData.date} starting at ${aiResponse.extractedData.time}. See you then!`;
+          } catch (bookingError: any) {
+            aiResponse.response = `I'm sorry, I couldn't book that slot: ${bookingError.message}. Could we try a different time?`;
+            aiResponse.action.type = "REQUEST_INFO";
           }
-          
-          const serviceNames = requestedServices.map(s => s.name).join(" and ");
-          aiResponse.response = `Perfect! I've successfully booked your ${serviceNames} for ${aiResponse.extractedData.date} starting at ${aiResponse.extractedData.time}. See you then!`;
         } else {
            aiResponse.response = "I almost had it booked, but I am missing some details (date or time). When would you like to come in?";
            aiResponse.action.type = "REQUEST_INFO";
         }
-      } catch (e: any) {
-        aiResponse.response = `I'm sorry, I couldn't book that slot: ${e.message}`;
-        aiResponse.action.type = "NONE";
+      } catch (err: any) {
+        this.logger.error("Booking failed:", err);
       }
     } else if (aiResponse.action?.type === 'HANDOFF') {
       aiResponse.response = "I completely understand. I'm transferring you to our human staff now, they will reply to you shortly.";
@@ -375,7 +408,18 @@ Rules:
       businessId = business.id;
     }
 
-    const customer = await this.customersService.findOrCreate({ phone: dto.customerPhone, name: dto.customerName, businessId });
+    let phoneToSave = dto.customerPhone || dto.phone;
+    if (!phoneToSave && dto.externalId) {
+      phoneToSave = dto.externalId.split('@')[0];
+    }
+    if (phoneToSave) {
+      phoneToSave = phoneToSave.split(':')[0];
+      if (!phoneToSave.startsWith('+') && /^\d/.test(phoneToSave)) {
+        phoneToSave = `+${phoneToSave}`;
+      }
+    }
+
+    const customer = await this.customersService.findOrCreate({ phone: phoneToSave, name: dto.customerName, businessId });
     let conversation = await this.prisma.conversation.findFirst({ where: { customerId: customer.id, isActive: true, source: (dto.source || 'WHATSAPP') as any } });
     if (!conversation) {
       conversation = await this.prisma.conversation.create({ data: { businessId, customerId: customer.id, source: (dto.source || 'WHATSAPP') as any, externalId: dto.externalId } });

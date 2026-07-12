@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AiSettingsCard } from "./ai-settings-card";
 import { WhatsappConnectionCard } from "./whatsapp-connection-card";
+import { WorkingHoursCard } from "./working-hours-card";
 import { useAuth } from "@/components/AuthProvider";
 import { useState, useEffect } from "react";
 import { fetchApi } from "@/lib/apiClient";
@@ -114,6 +115,9 @@ export default function SettingsPage() {
         
         {/* WhatsApp Connection */}
         <WhatsappConnectionCard />
+
+        {/* Working Hours */}
+        <WorkingHoursCard />
       </div>
     </div>
   );

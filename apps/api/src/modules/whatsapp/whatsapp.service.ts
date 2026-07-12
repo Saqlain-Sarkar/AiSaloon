@@ -15,6 +15,7 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
   private qrCodes: Map<string, string> = new Map();
   private connectionStatus: Map<string, boolean> = new Map();
   private processedMessages: Set<string> = new Set();
+  private retryCounts: Map<string, number> = new Map();
 
   constructor(
     @Inject(forwardRef(() => ConversationsService))
@@ -60,6 +61,9 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       auth: state,
       printQRInTerminal: false,
       logger: pino({ level: 'silent' }) as any, 
+      keepAliveIntervalMs: 30000,
+      retryRequestDelayMs: 250,
+      maxMsgRetryCount: 5,
     });
 
     this.clients.set(businessId, client);
@@ -77,26 +81,34 @@ export class WhatsappService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (connection === 'close') {
-        const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-        this.logger.warn(`[${businessId}] Connection closed, reconnecting: ${shouldReconnect}`);
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const isFatal = statusCode === 401 || statusCode === 403 || statusCode === 405;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut && !isFatal;
+        this.logger.warn(`[${businessId}] Connection closed. Code: ${statusCode}. Fatal: ${isFatal}. Reconnecting: ${shouldReconnect}`);
         
         this.connectionStatus.set(businessId, false);
         this.clients.delete(businessId);
         this.qrCodes.delete(businessId);
         
         if (shouldReconnect) {
-          // Reconnect logic
+          const retries = this.retryCounts.get(businessId) || 0;
+          const delay = Math.min(5000 * Math.pow(1.5, retries), 60000); // Exponential backoff max 60s
+          this.retryCounts.set(businessId, retries + 1);
+          
+          this.logger.log(`[${businessId}] Retrying connection in ${Math.round(delay)}ms (Attempt ${retries + 1})`);
           setTimeout(() => {
             this.initializeClient(businessId);
-          }, 5000);
+          }, delay);
         } else {
-          this.logger.log(`[${businessId}] User logged out. Cleaning up session.`);
+          this.logger.log(`[${businessId}] User logged out or fatal error. Cleaning up session.`);
           await clearState();
+          this.retryCounts.delete(businessId);
         }
       } else if (connection === 'open') {
         this.logger.log(`[${businessId}] WhatsApp Client is Ready! AI is now connected.`);
         this.connectionStatus.set(businessId, true);
         this.qrCodes.delete(businessId); 
+        this.retryCounts.delete(businessId);
       }
     });
 

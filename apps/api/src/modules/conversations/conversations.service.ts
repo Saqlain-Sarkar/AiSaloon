@@ -71,11 +71,27 @@ Rules:
       businessId = business.id;
     }
 
-    let customer = await this.customersService.findOrCreate({
-      phone: dto.customerPhone,
-      name: dto.customerName,
-      businessId,
+    // Find customer by looking up any previous conversation with this exact externalId (WhatsApp JID/LID)
+    let previousConversation = await this.prisma.conversation.findFirst({
+      where: { externalId: dto.externalId, source: dto.source || 'WHATSAPP', businessId },
+      orderBy: { createdAt: 'desc' }
     });
+
+    let customer = null;
+    if (previousConversation && previousConversation.customerId) {
+      customer = await this.prisma.customer.findUnique({
+        where: { id: previousConversation.customerId }
+      });
+    }
+
+    // If no previous conversation, fallback to finding or creating by the initial phone number (even if masked)
+    if (!customer) {
+      customer = await this.customersService.findOrCreate({
+        phone: dto.customerPhone,
+        name: dto.customerName,
+        businessId,
+      });
+    }
 
     let conversation = await this.prisma.conversation.findFirst({
       where: { customerId: customer.id, isActive: true, source: dto.source || 'WHATSAPP' },
